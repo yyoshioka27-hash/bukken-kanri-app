@@ -468,8 +468,6 @@ if "new_attachment_path" not in st.session_state:
 if "editing_log_id" not in st.session_state:
     st.session_state["editing_log_id"] = None
 
-if "show_structural_note" not in st.session_state:
-    st.session_state["show_structural_note"] = False
 
 
 with st.sidebar:
@@ -589,6 +587,7 @@ current_pdf_key = f"current_pdf_{project['id']}"
 ensure_project_extra_fields(project)
 
 structural_note_key = f"structural_note_{project['id']}"
+show_structural_note_key = f"show_structural_note_{project['id']}"
 
 if structural_note_key not in st.session_state:
     st.session_state[structural_note_key] = project.get("structural_note", "")
@@ -631,8 +630,9 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
-    if st.button("🗒 構造設計メモ", use_container_width=True):
-        st.session_state["show_structural_note"] = not st.session_state.get("show_structural_note", False)
+    memo_btn_label = "🗒 構造設計メモを閉じる" if st.session_state.get(show_structural_note_key, False) else "🗒 構造設計メモを開く"
+    if st.button(memo_btn_label, use_container_width=True):
+        st.session_state[show_structural_note_key] = not st.session_state.get(show_structural_note_key, False)
         st.rerun()
 
 with col5:
@@ -666,7 +666,7 @@ if latest_pdf_path and Path(latest_pdf_path).exists():
         )
 
 
-if st.session_state.get("show_structural_note", False):
+if st.session_state.get(show_structural_note_key, False):
     st.divider()
     st.subheader("🏗 構造設計作業メモ")
 
