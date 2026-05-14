@@ -18,7 +18,15 @@ BACKUP_DIR = DATA_DIR / "backup"
 EXPORT_PDF_DIR = DATA_DIR / "export_pdf"
 
 STATUSES = ["未対応", "対応中", "対応済", "保留"]
-PRIORITIES = ["低", "中", "高"]
+PRIORITIES = ["低", "中", "高", "構造設計"]
+
+
+PRIORITY_COLORS = {
+    "低": "#8f8f8f",
+    "中": "#2f80ed",
+    "高": "#d32f2f",
+    "構造設計": "#6a1b9a",
+}
 
 
 def init_dirs():
@@ -278,7 +286,16 @@ def due_style(log):
         return "#eaf3ff", "#4d94ff", "3日以内"
 
     if priority == "高":
-        return "#eaf3ff", "#4d94ff", "重要度高"
+        return "#ffecec", "#e53935", "重要度高"
+
+    if priority == "構造設計":
+        return "#f3e8ff", "#8e44ad", "構造設計"
+
+    if priority == "中":
+        return "#eaf3ff", "#4d94ff", ""
+
+    if priority == "低":
+        return "#f7f7f7", "#bdbdbd", ""
 
     return "#ffffff", "#dddddd", ""
 
@@ -388,7 +405,9 @@ def card_html(log, bg_color, border_color, due_label):
     text_status = html.escape(str(log.get("status", "")))
     text_due = html.escape(str(log.get("due_date", "")))
     text_person = html.escape(str(log.get("person", "")))
-    text_priority = html.escape(str(log.get("priority", "")))
+    raw_priority = str(log.get("priority", ""))
+    text_priority = html.escape(raw_priority)
+    priority_color = PRIORITY_COLORS.get(raw_priority, "#666666")
     text_content = html.escape(str(log.get("content", ""))).replace("\n", "<br>")
     text_due_label = html.escape(str(due_label))
 
@@ -417,7 +436,7 @@ def card_html(log, bg_color, border_color, due_label):
         f'期限：{text_due} '
         f'{label_html}　'
         f'相手先：{text_person}　'
-        f'重要度：<b>{text_priority}</b>'
+        f'重要度：<span style="display:inline-block; color:white; background:{priority_color}; padding:2px 8px; border-radius:8px; font-size:12px;">{text_priority}</span>'
         f'<br>'
         f'{text_content}'
         f'</div>'
