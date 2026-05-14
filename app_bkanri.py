@@ -573,7 +573,7 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
-
+    if st.button("🖨 履歴PDFを書き出す"):
         ok, result, out_path = export_project_logs_pdf(project)
         if ok:
             st.success(f"履歴PDFを出力しました：{result}")
