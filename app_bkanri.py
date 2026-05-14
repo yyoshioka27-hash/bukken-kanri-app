@@ -109,6 +109,23 @@ def export_project_logs_pdf(project):
     return True, str(out_path), out_path
 
 
+
+
+def export_schedule_pdf(project):
+    src_text = str(project.get("schedule_pdf_path", "")).strip().strip('"').strip("'")
+    if not src_text:
+        return False, "path_not_set", None
+
+    src = Path(src_text)
+    if not src.exists() or src.suffix.lower() != ".pdf":
+        return False, "source_not_found", None
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_name = f"{sanitize_windows_filename(project.get('name', '物件'))}_工程表_{ts}.pdf"
+    out_path = EXPORT_PDF_DIR / out_name
+    shutil.copy2(src, out_path)
+    return True, str(out_path), out_path
+
 def load_data():
     init_dirs()
     if not DATA_FILE.exists():
@@ -574,7 +591,20 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
-    st.caption("履歴書き出し")
+    st.caption("PDF書き出し")
+    if st.button("📤 工程表PDFを書き出す", use_container_width=True):
+        ok, result, out_path = export_schedule_pdf(project)
+        if ok:
+            st.success(f"工程表PDFを出力しました：{result}")
+            try:
+                os.startfile(str(out_path))
+            except Exception:
+                pass
+        elif result == "path_not_set":
+            st.warning("工程表PDFのパスが未設定です。")
+        else:
+            st.error("工程表PDFの出力に失敗しました。パスとファイルを確認してください。")
+
     if st.button("🖨 履歴PDFを書き出す", use_container_width=True):
         ok, result, out_path = export_project_logs_pdf(project)
         if ok:
