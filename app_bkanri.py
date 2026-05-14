@@ -449,6 +449,9 @@ if "new_attachment_path" not in st.session_state:
 if "editing_log_id" not in st.session_state:
     st.session_state["editing_log_id"] = None
 
+if "show_structural_note" not in st.session_state:
+    st.session_state["show_structural_note"] = False
+
 
 with st.sidebar:
     st.header("📌 物件一覧")
@@ -590,7 +593,7 @@ else:
 
 st.divider()
 
-col1, col2, col3, col4 = st.columns([4, 1.5, 1.5, 1.8])
+col1, col2, col3, col4, col5 = st.columns([4, 1.5, 1.5, 1.8, 1.6])
 
 with col1:
     st.subheader(f"🏢 {project['name']}")
@@ -609,6 +612,11 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
+    if st.button("🗒 構造設計メモ", use_container_width=True):
+        st.session_state["show_structural_note"] = not st.session_state.get("show_structural_note", False)
+        st.rerun()
+
+with col5:
     st.caption("PDF書き出し")
     if st.button("📤 工程表PDFを書き出す", use_container_width=True):
         ok, result, out_path = export_schedule_pdf(project)
