@@ -86,11 +86,14 @@ def export_project_logs_pdf(project):
     y -= 2 * mm
     draw_line(f"物件名: {project.get('name', '')}")
     draw_line(f"相手先・担当: {project.get('client', '')}")
-    draw_line(f"PDF出力日: {ts.strftime('%Y-%m-%d %H:%M:%S')}")
+    draw_line(f"PDF出力日時: {ts.strftime('%Y-%m-%d %H:%M:%S')}")
     y -= 2 * mm
     draw_line("【やり取り履歴一覧】")
 
-    logs = sorted(project.get("logs", []), key=lambda x: x.get("date", ""))
+    logs = sorted(
+        project.get("logs", []),
+        key=lambda x: parse_date_safe(x.get("date", "")) or date.min,
+    )
     if not logs:
         draw_line("履歴はありません。")
     else:
@@ -686,11 +689,10 @@ if st.session_state.get("show_structural_note", False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 
-history_col1, history_col2 = st.columns([4, 1.4])
+history_col1, history_col2 = st.columns([4, 1.6], vertical_alignment="bottom")
 with history_col1:
     st.subheader("📋 選択物件のやり取り履歴")
 with history_col2:
-    st.write("")
     if st.button("📄 履歴PDF出力", use_container_width=True):
         trigger_history_pdf_export(project)
 
