@@ -111,6 +111,24 @@ def export_project_logs_pdf(project):
 
 
 
+
+
+def trigger_history_pdf_export(project):
+    ok, result, out_path = export_project_logs_pdf(project)
+    if ok:
+        st.session_state["latest_export_pdf_path"] = str(out_path)
+        st.success(f"履歴PDFを出力しました：{result}")
+        try:
+            os.startfile(str(out_path))
+        except Exception:
+            pass
+    elif result == "reportlab_not_installed":
+        st.warning("PDF出力には reportlab が必要です。`pip install reportlab` を実行してください。")
+    elif result == "font_not_found":
+        st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
+    else:
+        st.error("履歴PDFの出力に失敗しました。")
+
 def export_schedule_pdf(project):
     src_text = str(project.get("schedule_pdf_path", "")).strip().strip('"').strip("'")
     if not src_text:
@@ -606,20 +624,10 @@ with col4:
             st.error("工程表PDFの出力に失敗しました。パスとファイルを確認してください。")
 
     if st.button("🖨 履歴PDFを書き出す", use_container_width=True):
-        ok, result, out_path = export_project_logs_pdf(project)
-        if ok:
-            st.session_state["latest_export_pdf_path"] = str(out_path)
-            st.success(f"履歴PDFを出力しました：{result}")
-            try:
-                os.startfile(str(out_path))
-            except Exception:
-                pass
-        elif result == "reportlab_not_installed":
-            st.warning("PDF出力には reportlab が必要です。`pip install reportlab` を実行してください。")
-        elif result == "font_not_found":
-            st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
-        else:
-            st.error("履歴PDFの出力に失敗しました。")
+        trigger_history_pdf_export(project)
+
+if st.button("🖨 いつでも履歴PDFを出力", use_container_width=True):
+    trigger_history_pdf_export(project)
 
 if "latest_export_pdf_path" not in st.session_state:
     st.session_state["latest_export_pdf_path"] = ""
