@@ -631,8 +631,6 @@ with col5:
         else:
             st.error("工程表PDFの出力に失敗しました。パスとファイルを確認してください。")
 
-    if st.button("📄 履歴PDF出力", use_container_width=True):
-        trigger_history_pdf_export(project)
 
 if "latest_export_pdf_path" not in st.session_state:
     st.session_state["latest_export_pdf_path"] = ""
@@ -688,7 +686,13 @@ if st.session_state.get("show_structural_note", False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 
-st.subheader("📋 選択物件のやり取り履歴")
+history_col1, history_col2 = st.columns([4, 1.4])
+with history_col1:
+    st.subheader("📋 選択物件のやり取り履歴")
+with history_col2:
+    st.write("")
+    if st.button("📄 履歴PDF出力", use_container_width=True):
+        trigger_history_pdf_export(project)
 
 show_only_open = st.checkbox("未対応・対応中だけ表示")
 
