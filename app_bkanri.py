@@ -34,7 +34,7 @@ def sanitize_windows_filename(name):
     return safe or "project"
 
 
-def export_project_logs_pdf(project):
+def build_project_history_pdf(project):
     try:
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
@@ -116,15 +116,12 @@ def export_project_logs_pdf(project):
 
 
 
-def trigger_history_pdf_export(project):
-    ok, result, out_path = export_project_logs_pdf(project)
+def export_project_history_pdf(project):
+    ok, result, out_path = build_project_history_pdf(project)
     if ok:
         st.session_state["latest_export_pdf_path"] = str(out_path)
         st.success(f"履歴PDFを出力しました：{result}")
-        try:
-            os.startfile(str(out_path))
-        except Exception:
-            pass
+        open_path(str(out_path))
     elif result == "reportlab_not_installed":
         st.warning("PDF出力には reportlab が必要です。`pip install reportlab` を実行してください。")
     elif result == "font_not_found":
@@ -689,12 +686,12 @@ if st.session_state.get("show_structural_note", False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 
-history_col1, history_col2 = st.columns([4, 1.6], vertical_alignment="bottom")
-with history_col1:
+hist_title_col, hist_btn_col = st.columns([3, 1])
+with hist_title_col:
     st.subheader("📋 選択物件のやり取り履歴")
-with history_col2:
+with hist_btn_col:
     if st.button("📄 履歴PDF出力", use_container_width=True):
-        trigger_history_pdf_export(project)
+        export_project_history_pdf(project)
 
 show_only_open = st.checkbox("未対応・対応中だけ表示")
 
