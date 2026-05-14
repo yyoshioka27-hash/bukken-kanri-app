@@ -555,7 +555,6 @@ else:
 
 st.divider()
 
-col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
 with col1:
     st.subheader(f"🏢 {project['name']}")
@@ -574,7 +573,7 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
-    if st.button("📄 履歴PDF出力", use_container_width=True):
+
         ok, result, out_path = export_project_logs_pdf(project)
         if ok:
             st.success(f"履歴PDFを出力しました：{result}")
@@ -589,10 +588,7 @@ with col4:
         else:
             st.error("履歴PDFの出力に失敗しました。")
 
-if st.button("🏗 構造設計メモ"):
-    st.session_state["show_structural_note"] = not st.session_state.get(
-        "show_structural_note", False
-    )
+
 if st.session_state.get("show_structural_note", False):
     st.divider()
     st.subheader("🏗 構造設計作業メモ")
