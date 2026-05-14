@@ -574,9 +574,11 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
-    if st.button("🖨 履歴PDFを書き出す"):
+    st.caption("履歴書き出し")
+    if st.button("🖨 履歴PDFを書き出す", use_container_width=True):
         ok, result, out_path = export_project_logs_pdf(project)
         if ok:
+            st.session_state["latest_export_pdf_path"] = str(out_path)
             st.success(f"履歴PDFを出力しました：{result}")
             try:
                 os.startfile(str(out_path))
@@ -588,6 +590,20 @@ with col4:
             st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
         else:
             st.error("履歴PDFの出力に失敗しました。")
+
+if "latest_export_pdf_path" not in st.session_state:
+    st.session_state["latest_export_pdf_path"] = ""
+
+latest_pdf_path = st.session_state.get("latest_export_pdf_path", "")
+if latest_pdf_path and Path(latest_pdf_path).exists():
+    with open(latest_pdf_path, "rb") as f:
+        st.download_button(
+            "📥 直近の履歴PDFをダウンロード",
+            data=f,
+            file_name=Path(latest_pdf_path).name,
+            mime="application/pdf",
+            use_container_width=True,
+        )
 
 
 if st.session_state.get("show_structural_note", False):
