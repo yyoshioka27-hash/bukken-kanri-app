@@ -15,6 +15,7 @@ APP_TITLE = "物件管理アプリ 第三段階"
 DATA_DIR = Path(r"C:\構造設計メモ管理データ")
 DATA_FILE = DATA_DIR / "bukken_data.json"
 BACKUP_DIR = DATA_DIR / "backup"
+EXPORT_PDF_DIR = DATA_DIR / "export_pdf"
 
 STATUSES = ["未対応", "対応中", "対応済", "保留"]
 PRIORITIES = ["低", "中", "高"]
@@ -23,6 +24,89 @@ PRIORITIES = ["低", "中", "高"]
 def init_dirs():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    EXPORT_PDF_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def sanitize_windows_filename(name):
+    invalid_chars = '<>:"/\\|?*'
+    safe = "".join("_" if c in invalid_chars else c for c in str(name))
+    safe = safe.strip().rstrip(".")
+    return safe or "project"
+
+
+def export_project_logs_pdf(project):
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+    except ImportError:
+        return False, "reportlab_not_installed", None
+
+    font_candidates = [
+        r"C:\Windows\Fonts\meiryo.ttc",
+        r"C:\Windows\Fonts\msgothic.ttc",
+        r"C:\Windows\Fonts\YuGothM.ttc",
+    ]
+
+    font_name = None
+    for idx, font_path in enumerate(font_candidates):
+        if Path(font_path).exists():
+            font_name = f"jp_font_{idx}"
+            pdfmetrics.registerFont(TTFont(font_name, font_path))
+            break
+
+    if font_name is None:
+        return False, "font_not_found", None
+
+    ts = datetime.now()
+    file_name = (
+        f"{sanitize_windows_filename(project.get('name', '物件'))}"
+        f"_やり取り履歴_{ts.strftime('%Y%m%d_%H%M%S')}.pdf"
+    )
+    out_path = EXPORT_PDF_DIR / file_name
+
+    c = canvas.Canvas(str(out_path), pagesize=A4)
+    width, height = A4
+    y = height - 20 * mm
+    line_h = 7 * mm
+
+    def draw_line(text, size=11):
+        nonlocal y
+        if y < 20 * mm:
+            c.showPage()
+            c.setFont(font_name, size)
+            y = height - 20 * mm
+        c.setFont(font_name, size)
+        c.drawString(15 * mm, y, str(text))
+        y -= line_h
+
+    draw_line("物件やり取り履歴", 14)
+    y -= 2 * mm
+    draw_line(f"物件名: {project.get('name', '')}")
+    draw_line(f"相手先・担当: {project.get('client', '')}")
+    draw_line(f"PDF出力日: {ts.strftime('%Y-%m-%d %H:%M:%S')}")
+    y -= 2 * mm
+    draw_line("【やり取り履歴一覧】")
+
+    logs = sorted(project.get("logs", []), key=lambda x: x.get("date", ""))
+    if not logs:
+        draw_line("履歴はありません。")
+    else:
+        for i, log in enumerate(logs, start=1):
+            draw_line(f"{i}. 日付: {log.get('date', '')}")
+            draw_line(f"   状態: {log.get('status', '')}")
+            draw_line(f"   期限: {log.get('due_date', '')}")
+            draw_line(f"   重要度: {log.get('priority', '')}")
+            draw_line(f"   相手先: {log.get('person', '')}")
+            for content_line in str(log.get("content", "")).splitlines() or [""]:
+                draw_line(f"   内容: {content_line}")
+            draw_line(f"   添付ファイルパス: {log.get('attachment_path', '')}")
+            y -= 1 * mm
+
+    c.save()
+    return True, str(out_path), out_path
 
 
 def load_data():
@@ -490,10 +574,25 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
-    if st.button("🏗 構造設計メモ"):
-        st.session_state["show_structural_note"] = not st.session_state.get(
-            "show_structural_note", False
-        )
+    if st.button("📄 履歴PDF出力", use_container_width=True):
+        ok, result, out_path = export_project_logs_pdf(project)
+        if ok:
+            st.success(f"履歴PDFを出力しました：{result}")
+            try:
+                os.startfile(str(out_path))
+            except Exception:
+                pass
+        elif result == "reportlab_not_installed":
+            st.warning("PDF出力には reportlab が必要です。`pip install reportlab` を実行してください。")
+        elif result == "font_not_found":
+            st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
+        else:
+            st.error("履歴PDFの出力に失敗しました。")
+
+if st.button("🏗 構造設計メモ"):
+    st.session_state["show_structural_note"] = not st.session_state.get(
+        "show_structural_note", False
+    )
 if st.session_state.get("show_structural_note", False):
     st.divider()
     st.subheader("🏗 構造設計作業メモ")
