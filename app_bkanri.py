@@ -555,6 +555,7 @@ else:
 
 st.divider()
 
+col1, col2, col3, col4 = st.columns([4, 1.5, 1.5, 1.8])
 
 with col1:
     st.subheader(f"🏢 {project['name']}")
