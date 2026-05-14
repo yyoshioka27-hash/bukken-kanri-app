@@ -82,7 +82,7 @@ def export_project_logs_pdf(project):
         c.drawString(15 * mm, y, str(text))
         y -= line_h
 
-    draw_line("物件やり取り履歴", 14)
+    draw_line("やり取り履歴", 14)
     y -= 2 * mm
     draw_line(f"物件名: {project.get('name', '')}")
     draw_line(f"相手先・担当: {project.get('client', '')}")
@@ -623,11 +623,8 @@ with col4:
         else:
             st.error("工程表PDFの出力に失敗しました。パスとファイルを確認してください。")
 
-    if st.button("🖨 履歴PDFを書き出す", use_container_width=True):
+    if st.button("📄 履歴PDF出力", use_container_width=True):
         trigger_history_pdf_export(project)
-
-if st.button("🖨 いつでも履歴PDFを出力", use_container_width=True):
-    trigger_history_pdf_export(project)
 
 if "latest_export_pdf_path" not in st.session_state:
     st.session_state["latest_export_pdf_path"] = ""
