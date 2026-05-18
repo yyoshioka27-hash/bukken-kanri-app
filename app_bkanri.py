@@ -42,7 +42,7 @@ def sanitize_windows_filename(name):
     return safe or "project"
 
 
-def build_project_history_pdf(project):
+def build_project_history_pdf(project, include_structural_note=False):
     try:
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
@@ -116,6 +116,19 @@ def build_project_history_pdf(project):
             draw_line(f"   添付ファイルパス: {log.get('attachment_path', '')}")
             y -= 1 * mm
 
+    if include_structural_note:
+        y -= 2 * mm
+        draw_line("【構造設計メモ】")
+        structural_note_text = str(project.get("structural_note", "")).strip()
+        if not structural_note_text:
+            draw_line("構造設計メモはありません。")
+        else:
+            updated_at = str(project.get("structural_note_updated_at", "")).strip()
+            if updated_at:
+                draw_line(f"最終更新: {updated_at}")
+            for memo_line in structural_note_text.splitlines() or [""]:
+                draw_line(memo_line)
+
     c.save()
     return True, str(out_path), out_path
 
@@ -136,6 +149,20 @@ def export_project_history_pdf(project):
         st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
     else:
         st.error("履歴PDFの出力に失敗しました。")
+
+
+def export_project_history_and_structural_note_pdf(project):
+    ok, result, out_path = build_project_history_pdf(project, include_structural_note=True)
+    if ok:
+        st.session_state["latest_export_pdf_path"] = str(out_path)
+        st.success(f"履歴＋構造設計メモPDFを出力しました：{result}")
+        open_path(str(out_path))
+    elif result == "reportlab_not_installed":
+        st.warning("PDF出力には reportlab が必要です。`pip install reportlab` を実行してください。")
+    elif result == "font_not_found":
+        st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
+    else:
+        st.error("履歴＋構造設計メモPDFの出力に失敗しました。")
 
 def export_schedule_pdf(project):
     src_text = str(project.get("schedule_pdf_path", "")).strip().strip('"').strip("'")
@@ -644,7 +671,7 @@ with col5:
     st.caption("PDF書き出し")
     pdf_export_type = st.radio(
         "出力対象",
-        ["工程表PDF", "やり取り履歴PDF"],
+        ["工程表PDF", "やり取り履歴PDF", "やり取り履歴＋構造設計メモPDF"],
         key=f"pdf_export_type_{project['id']}",
         horizontal=False,
         label_visibility="collapsed",
@@ -660,8 +687,10 @@ with col5:
                 st.warning("工程表PDFのパスが未設定です。下部の『現在の物件のパス設定』から登録してください。")
             else:
                 st.error("工程表PDFの出力に失敗しました。パスとファイルを確認してください。")
-        else:
+        elif pdf_export_type == "やり取り履歴PDF":
             export_project_history_pdf(project)
+        else:
+            export_project_history_and_structural_note_pdf(project)
 
 
 if "latest_export_pdf_path" not in st.session_state:
