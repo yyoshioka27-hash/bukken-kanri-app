@@ -11,6 +11,9 @@ from tkinter import filedialog
 from datetime import datetime, date
 from pathlib import Path
 
+st.warning("DEBUG: この app_bkanri.py が実行されています")
+st.caption(f"実行中ファイル: {os.path.abspath(__file__)}")
+
 APP_TITLE = "物件管理アプリ 第三段階"
 DATA_DIR = Path(r"C:\構造設計メモ管理データ")
 DATA_FILE = DATA_DIR / "bukken_data.json"
@@ -747,10 +750,8 @@ if st.session_state.get(show_structural_note_key, False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 st.subheader("📋 選択物件のやり取り履歴")
-if st.button("📄 履歴PDF出力", key="history_pdf_main"):
-    st.success("PDFボタン表示確認")
-
-st.info("PDFボタン表示確認")
+st.warning("DEBUG: 履歴PDFボタン設置位置です")
+st.button("📄 履歴PDF出力", key="history_pdf_main_debug")
 
 show_only_open = st.checkbox("未対応・対応中だけ表示")
 
