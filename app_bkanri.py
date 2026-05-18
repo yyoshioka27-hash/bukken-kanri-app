@@ -19,6 +19,7 @@ DATA_DIR = Path(r"C:\構造設計メモ管理データ")
 DATA_FILE = DATA_DIR / "bukken_data.json"
 BACKUP_DIR = DATA_DIR / "backup"
 EXPORT_PDF_DIR = DATA_DIR / "export_pdf"
+EXPORT_TEXT_DIR = DATA_DIR / "export_text"
 
 STATUSES = ["未対応", "対応中", "対応済", "保留"]
 PRIORITIES = ["低", "中", "高", "構造設計"]
@@ -36,6 +37,7 @@ def init_dirs():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     EXPORT_PDF_DIR.mkdir(parents=True, exist_ok=True)
+    EXPORT_TEXT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def sanitize_windows_filename(name):
@@ -166,6 +168,48 @@ def export_project_history_and_structural_note_pdf(project):
         st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
     else:
         st.error("履歴＋構造設計メモPDFの出力に失敗しました。")
+
+
+
+def build_structural_note_a4_text(project):
+    ts = datetime.now()
+    file_name = (
+        f"{sanitize_windows_filename(project.get('name', '物件'))}"
+        f"_構造メモ_A4_{ts.strftime('%Y%m%d_%H%M%S')}.txt"
+    )
+    out_path = EXPORT_TEXT_DIR / file_name
+
+    memo_text = str(project.get("structural_note", "")).strip()
+    updated_at = str(project.get("structural_note_updated_at", "")).strip()
+
+    lines = [
+        "=" * 76,
+        "構造設計メモ（A4テキスト形式）",
+        "=" * 76,
+        f"物件名: {project.get('name', '')}",
+        f"相手先・担当: {project.get('client', '')}",
+        f"作成日時: {ts.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"最終更新: {updated_at or '-'}",
+        "-" * 76,
+        "【メモ】",
+    ]
+
+    if memo_text:
+        lines.extend(memo_text.splitlines())
+    else:
+        lines.append("（メモ未入力）")
+
+    lines.extend(["-" * 76, "A4印刷時は余白を標準または狭いに設定してください。", ""])
+
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    return out_path
+
+
+def export_structural_note_a4_text(project):
+    out_path = build_structural_note_a4_text(project)
+    st.session_state["latest_export_text_path"] = str(out_path)
+    st.success(f"構造メモ（A4テキスト）を出力しました：{out_path}")
+    open_path(str(out_path))
 
 def export_schedule_pdf(project):
     src_text = str(project.get("schedule_pdf_path", "")).strip().strip('"').strip("'")
@@ -646,7 +690,7 @@ else:
 
 st.divider()
 
-col1, col2, col3, col4, col5 = st.columns([4, 1.5, 1.5, 1.8, 1.6])
+col1, col2, col3, col4, col5, col6 = st.columns([4, 1.3, 1.3, 1.6, 1.4, 1.6])
 
 with col1:
     st.subheader(f"🏢 {project['name']}")
@@ -671,6 +715,10 @@ with col4:
         st.rerun()
 
 with col5:
+    if st.button("📝 構造メモA4出力", use_container_width=True):
+        export_structural_note_a4_text(project)
+
+with col6:
     st.caption("PDF書き出し")
     pdf_export_type = st.radio(
         "出力対象",
@@ -698,6 +746,8 @@ with col5:
 
 if "latest_export_pdf_path" not in st.session_state:
     st.session_state["latest_export_pdf_path"] = ""
+if "latest_export_text_path" not in st.session_state:
+    st.session_state["latest_export_text_path"] = ""
 
 latest_pdf_path = st.session_state.get("latest_export_pdf_path", "")
 if latest_pdf_path and Path(latest_pdf_path).exists():
@@ -707,6 +757,17 @@ if latest_pdf_path and Path(latest_pdf_path).exists():
             data=f,
             file_name=Path(latest_pdf_path).name,
             mime="application/pdf",
+            use_container_width=True,
+        )
+
+latest_text_path = st.session_state.get("latest_export_text_path", "")
+if latest_text_path and Path(latest_text_path).exists():
+    with open(latest_text_path, "rb") as f:
+        st.download_button(
+            "📥 直近の構造メモテキストをダウンロード",
+            data=f,
+            file_name=Path(latest_text_path).name,
+            mime="text/plain",
             use_container_width=True,
         )
 
