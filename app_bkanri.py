@@ -747,20 +747,20 @@ if st.session_state.get(show_structural_note_key, False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 
-st.subheader("📋 選択物件のやり取り履歴")
+history_title_col, history_action_col = st.columns([4, 1])
 
-history_head_col1, history_head_col2 = st.columns([3, 2])
+with history_title_col:
+    st.subheader("📋 選択物件のやり取り履歴")
 
-with history_head_col1:
-    show_only_open = st.checkbox("未対応・対応中だけ表示")
-
-with history_head_col2:
-    if st.button("📄 履歴PDF出力"):
+with history_action_col:
+    if st.button("📄 履歴PDF出力", use_container_width=True):
         try:
             export_project_history_pdf(project)
             st.info("PDF出力処理を実行しました。")
         except Exception as e:
             st.error(f"PDF出力処理でエラーが発生しました: {e}")
+
+show_only_open = st.checkbox("未対応・対応中だけ表示")
 
 logs = project.get("logs", [])
 
