@@ -747,13 +747,13 @@ if st.session_state.get(show_structural_note_key, False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 st.subheader("📋 選択物件のやり取り履歴")
-st.info("PDFボタン表示位置確認")
-if st.button("📄 履歴PDF出力", key="export_history_pdf_main"):
+if st.button("📄 履歴PDF出力", key="history_pdf_main", use_container_width=False):
     try:
         export_project_history_pdf(project)
         st.info("PDF出力処理を実行しました。")
     except Exception as e:
         st.error(f"PDF出力処理でエラーが発生しました: {e}")
+st.info("PDFボタン表示確認")
 
 show_only_open = st.checkbox("未対応・対応中だけ表示")
 
