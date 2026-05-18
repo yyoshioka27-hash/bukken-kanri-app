@@ -709,18 +709,19 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
+    # 「工程表PDFを開く」「物件フォルダを開く」と同じ横並び列に表示
+    if st.button("📄 構造設計メモ出力", use_container_width=True):
+        out_path = build_structural_note_a4_text(project)
+        st.session_state["latest_export_text_path"] = str(out_path)
+        st.success(f"構造設計メモ（A4テキスト）を生成しました：{out_path.name}")
+
+with col5:
     memo_btn_label = "🗒 構造設計メモを閉じる" if st.session_state.get(show_structural_note_key, False) else "🗒 構造設計メモを開く"
     if st.button(memo_btn_label, use_container_width=True):
         st.session_state[show_structural_note_key] = not st.session_state.get(show_structural_note_key, False)
         st.rerun()
 
 with col5:
-    # 見出し「🏢 {project['name']}」の選択中物件詳細エリア内に表示する
-    if st.button("📄 構造設計メモを出力", use_container_width=True):
-        out_path = build_structural_note_a4_text(project)
-        st.session_state["latest_export_text_path"] = str(out_path)
-        st.success(f"構造設計メモ（A4テキスト）を生成しました：{out_path.name}")
-
     latest_structural_memo_path = st.session_state.get("latest_export_text_path", "")
     if latest_structural_memo_path and Path(latest_structural_memo_path).exists():
         memo_name = Path(latest_structural_memo_path).name
