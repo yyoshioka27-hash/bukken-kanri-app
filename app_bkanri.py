@@ -749,7 +749,18 @@ st.divider()
 
 st.subheader("📋 選択物件のやり取り履歴")
 
-show_only_open = st.checkbox("未対応・対応中だけ表示")
+history_head_col1, history_head_col2 = st.columns([3, 2])
+
+with history_head_col1:
+    show_only_open = st.checkbox("未対応・対応中だけ表示")
+
+with history_head_col2:
+    if st.button("📄 履歴PDF出力"):
+        try:
+            export_project_history_pdf(project)
+            st.info("PDF出力処理を実行しました。")
+        except Exception as e:
+            st.error(f"PDF出力処理でエラーが発生しました: {e}")
 
 logs = project.get("logs", [])
 
