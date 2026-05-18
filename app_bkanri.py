@@ -747,7 +747,9 @@ if st.session_state.get(show_structural_note_key, False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 st.subheader("📋 選択物件のやり取り履歴")
-st.button("📄 履歴PDF出力", key="history_pdf_main")
+if st.button("📄 履歴PDF出力", key="history_pdf_main"):
+    st.success("PDFボタン表示確認")
+
 st.info("PDFボタン表示確認")
 
 show_only_open = st.checkbox("未対応・対応中だけ表示")
