@@ -152,6 +152,11 @@ def export_schedule_pdf(project):
     shutil.copy2(src, out_path)
     return True, str(out_path), out_path
 
+
+def save_latest_export_path(path_obj):
+    st.session_state["latest_export_pdf_path"] = str(path_obj)
+
+
 def load_data():
     init_dirs()
     if not DATA_FILE.exists():
@@ -637,18 +642,26 @@ with col4:
 
 with col5:
     st.caption("PDF書き出し")
-    if st.button("📤 工程表PDFを書き出す", use_container_width=True):
-        ok, result, out_path = export_schedule_pdf(project)
-        if ok:
-            st.success(f"工程表PDFを出力しました：{result}")
-            try:
-                os.startfile(str(out_path))
-            except Exception:
-                pass
-        elif result == "path_not_set":
-            st.warning("工程表PDFのパスが未設定です。")
+    pdf_export_type = st.radio(
+        "出力対象",
+        ["工程表PDF", "やり取り履歴PDF"],
+        key=f"pdf_export_type_{project['id']}",
+        horizontal=False,
+        label_visibility="collapsed",
+    )
+    if st.button("📤 PDFを書き出す", use_container_width=True):
+        if pdf_export_type == "工程表PDF":
+            ok, result, out_path = export_schedule_pdf(project)
+            if ok:
+                save_latest_export_path(out_path)
+                st.success(f"工程表PDFを出力しました：{result}")
+                open_path(str(out_path))
+            elif result == "path_not_set":
+                st.warning("工程表PDFのパスが未設定です。下部の『現在の物件のパス設定』から登録してください。")
+            else:
+                st.error("工程表PDFの出力に失敗しました。パスとファイルを確認してください。")
         else:
-            st.error("工程表PDFの出力に失敗しました。パスとファイルを確認してください。")
+            export_project_history_pdf(project)
 
 
 if "latest_export_pdf_path" not in st.session_state:
@@ -705,12 +718,7 @@ if st.session_state.get(show_structural_note_key, False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 
-hist_title_col, hist_btn_col = st.columns([3, 1])
-with hist_title_col:
-    st.subheader("📋 選択物件のやり取り履歴")
-with hist_btn_col:
-    if st.button("📄 履歴PDF出力", use_container_width=True):
-        export_project_history_pdf(project)
+st.subheader("📋 選択物件のやり取り履歴")
 
 show_only_open = st.checkbox("未対応・対応中だけ表示")
 
