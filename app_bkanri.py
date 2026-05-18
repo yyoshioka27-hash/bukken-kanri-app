@@ -709,11 +709,15 @@ with col3:
         open_path(project.get("folder_path", ""))
 
 with col4:
-    # 「工程表PDFを開く」「物件フォルダを開く」と同じ横並び列に表示
-    if st.button("📄 構造設計メモ出力", use_container_width=True):
-        out_path = build_structural_note_a4_text(project)
-        st.session_state["latest_export_text_path"] = str(out_path)
-        st.success(f"構造設計メモ（A4テキスト）を生成しました：{out_path.name}")
+    memo_text_for_download = str(st.session_state.get(structural_note_key, project.get("structural_note", "")))
+    st.download_button(
+        "📄 構造設計メモをtxt出力",
+        data=memo_text_for_download,
+        file_name="構造設計メモ.txt",
+        mime="text/plain",
+        use_container_width=True,
+        key=f"structural_memo_txt_download_{project['id']}",
+    )
 
 with col5:
     memo_btn_label = "🗒 構造設計メモを閉じる" if st.session_state.get(show_structural_note_key, False) else "🗒 構造設計メモを開く"
