@@ -715,8 +715,24 @@ with col4:
         st.rerun()
 
 with col5:
-    if st.button("📝 構造メモA4出力", use_container_width=True):
-        export_structural_note_a4_text(project)
+    # 見出し「🏢 {project['name']}」の選択中物件詳細エリア内に表示する
+    if st.button("📄 構造設計メモを出力", use_container_width=True):
+        out_path = build_structural_note_a4_text(project)
+        st.session_state["latest_export_text_path"] = str(out_path)
+        st.success(f"構造設計メモ（A4テキスト）を生成しました：{out_path.name}")
+
+    latest_structural_memo_path = st.session_state.get("latest_export_text_path", "")
+    if latest_structural_memo_path and Path(latest_structural_memo_path).exists():
+        memo_name = Path(latest_structural_memo_path).name
+        memo_bytes = Path(latest_structural_memo_path).read_bytes()
+        st.download_button(
+            "📥 構造設計メモをダウンロード",
+            data=memo_bytes,
+            file_name=memo_name,
+            mime="text/plain",
+            use_container_width=True,
+            key=f"download_structural_memo_{project['id']}",
+        )
 
 with col6:
     st.caption("PDF書き出し")
