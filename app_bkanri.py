@@ -474,7 +474,7 @@ def card_html(log, bg_color, border_color, due_label):
 
     if text_due_label:
         label_html = (
-            f'<span style="display:inline-block; background:{border_color}; '
+            f'<span class="due-chip" style="display:inline-block; background:{border_color}; '
             f'color:white; padding:2px 8px; border-radius:8px; '
             f'font-size:12px; margin-left:8px;">{text_due_label}</span>'
         )
@@ -482,7 +482,7 @@ def card_html(log, bg_color, border_color, due_label):
         label_html = ""
 
     return (
-        f'<div style="'
+        f'<div class="today-task-card" style="'
         f'background-color:{bg_color}; '
         f'border:1px solid {border_color}; '
         f'border-left:8px solid {border_color}; '
@@ -497,7 +497,7 @@ def card_html(log, bg_color, border_color, due_label):
         f'期限：{text_due} '
         f'{label_html}　'
         f'相手先：{text_person}　'
-        f'重要度：<span style="display:inline-block; color:white; background:{priority_color}; padding:2px 8px; border-radius:8px; font-size:12px;">{text_priority}</span>'
+        f'重要度：<span class="priority-chip" style="display:inline-block; color:white; background:{priority_color}; padding:2px 8px; border-radius:8px; font-size:12px;">{text_priority}</span>'
         f'<br>'
         f'{text_content}'
         f'</div>'
@@ -514,6 +514,52 @@ st.title("📁 物件管理アプリ 第三段階")
 st.markdown(
     """
     <style>
+    .today-task-card, .today-task-card * {
+      color: #1f2937 !important;
+    }
+    .today-task-card .due-chip, .today-task-card .priority-chip {
+      color: #ffffff !important;
+    }
+    .stButton > button, .stDownloadButton > button {
+      white-space: normal !important;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+      min-height: 46px;
+      line-height: 1.35;
+      padding-top: 0.45rem;
+      padding-bottom: 0.45rem;
+    }
+    [data-testid="stHorizontalBlock"] {
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+    [data-testid="stHorizontalBlock"] > div {
+      min-width: 180px;
+    }
+    .block-container {
+      max-width: 100%;
+    }
+    @media (max-width: 1200px) {
+      section[data-testid="stSidebar"] {
+        min-width: 250px !important;
+        max-width: 250px !important;
+      }
+      .main .block-container {
+        padding-left: 0.8rem;
+        padding-right: 0.8rem;
+      }
+      [data-testid="stHorizontalBlock"] {
+        flex-direction: column;
+      }
+      [data-testid="stHorizontalBlock"] > div {
+        width: 100% !important;
+        min-width: 0 !important;
+      }
+      .stButton > button, .stDownloadButton > button {
+        width: 100%;
+        font-size: 0.98rem;
+      }
+    }
     @media (max-width: 768px) {
       .stButton > button, .stDownloadButton > button {
         width: 100%;
@@ -704,11 +750,11 @@ with col1:
     )
 
 with col2:
-    if st.button("📄 工程表PDFを開く"):
+    if st.button("📄 工程表PDFを開く", use_container_width=True):
         open_path(project.get("schedule_pdf_path", ""))
 
 with col3:
-    if st.button("📂 物件フォルダを開く"):
+    if st.button("📂 物件フォルダを開く", use_container_width=True):
         open_path(project.get("folder_path", ""))
 
 with col4:
