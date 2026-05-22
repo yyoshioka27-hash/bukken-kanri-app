@@ -233,9 +233,18 @@ def load_data():
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if "projects" not in data:
-            data["projects"] = []
-        return data
+
+        if isinstance(data, dict):
+            projects = data.get("projects", [])
+            if not isinstance(projects, list):
+                projects = []
+            data["projects"] = projects
+            return data
+
+        if isinstance(data, list):
+            return {"projects": data}
+
+        return {"projects": []}
     except Exception:
         return {"projects": []}
 
