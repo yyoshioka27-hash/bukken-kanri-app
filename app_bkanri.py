@@ -6,22 +6,17 @@ import os
 import shutil
 import uuid
 import html
-import tkinter as tk
-from tkinter import filedialog
 from datetime import datetime, date
 from pathlib import Path
 
-st.warning("DEBUG: この app_bkanri.py が実行されています")
-st.caption(f"実行中ファイル: {os.path.abspath(__file__)}")
-
 APP_TITLE = "物件管理アプリ 第三段階"
-DATA_DIR = Path(r"C:\構造設計メモ管理データ")
+DATA_DIR = Path(__file__).resolve().parent / "data"
 DATA_FILE = DATA_DIR / "bukken_data.json"
 BACKUP_DIR = DATA_DIR / "backup"
 EXPORT_PDF_DIR = DATA_DIR / "export_pdf"
 EXPORT_TEXT_DIR = DATA_DIR / "export_text"
 
-STATUSES = ["未対応", "対応中", "対応済", "保留"]
+STATUSES = ["未対応", "対応中", "対応済", "連絡待ち", "保留"]
 PRIORITIES = ["低", "中", "高", "構造設計"]
 
 
@@ -276,40 +271,18 @@ def open_path(path_text):
 
 
 def browse_folder():
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    folder = filedialog.askdirectory()
-    root.destroy()
-    return folder
+    st.info("クラウド環境ではフォルダ参照ダイアログは利用できません。パスを直接入力してください。")
+    return ""
 
 
 def browse_pdf():
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    file_path = filedialog.askopenfilename(
-        filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
-    )
-    root.destroy()
-    return file_path
+    st.info("クラウド環境ではPDF参照ダイアログは利用できません。パスを直接入力してください。")
+    return ""
 
 
 def browse_any_file():
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    file_path = filedialog.askopenfilename(
-        filetypes=[
-            ("All files", "*.*"),
-            ("PDF files", "*.pdf"),
-            ("Excel files", "*.xlsx;*.xls"),
-            ("Word files", "*.docx"),
-            ("Text files", "*.txt"),
-        ]
-    )
-    root.destroy()
-    return file_path
+    st.info("クラウド環境ではファイル参照ダイアログは利用できません。パスを直接入力してください。")
+    return ""
 
 
 def get_project(data, project_id):
@@ -529,6 +502,27 @@ def ensure_project_extra_fields(project):
         project["structural_note_updated_at"] = ""
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 st.title("📁 物件管理アプリ 第三段階")
+st.markdown(
+    """
+    <style>
+    @media (max-width: 768px) {
+      .stButton > button, .stDownloadButton > button {
+        width: 100%;
+        min-height: 44px;
+        font-size: 0.95rem;
+      }
+      .stTextInput input, .stTextArea textarea, .stDateInput input, .stSelectbox div[data-baseweb="select"] {
+        font-size: 16px;
+      }
+      .block-container {
+        padding-left: 0.8rem;
+        padding-right: 0.8rem;
+      }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 data = load_data()
 
@@ -832,7 +826,6 @@ if st.session_state.get(show_structural_note_key, False):
             st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
 st.divider()
 st.subheader("📋 選択物件のやり取り履歴")
-st.warning("DEBUG: 履歴PDFボタン設置位置です")
 st.button("📄 履歴PDF出力", key="history_pdf_main_debug")
 
 show_only_open = st.checkbox("未対応・対応中だけ表示")
@@ -1125,5 +1118,6 @@ with st.expander("🔗 現在の物件のパス設定"):
         if st.button("📄 このPDFを開く"):
             open_path(st.session_state[current_pdf_key])
 
+st.caption("※クラウド版では、サーバー再起動時に一時保存データが消える可能性があります。本格運用時はGoogleスプレッドシートまたは外部DB保存への移行を推奨します。")
 
 # END
