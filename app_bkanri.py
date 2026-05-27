@@ -711,6 +711,10 @@ st.markdown(
         min-width: 340px !important;
     }
 
+    .mobile-toggle-bar {
+        display: none;
+    }
+
     /* iPad・スマホのサイドバー文字色対策 */
     [data-testid="stSidebar"] {
         background-color: #262730 !important;
@@ -721,9 +725,7 @@ st.markdown(
     [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] h4,
     [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] div {
+    [data-testid="stSidebar"] label {
         color: #f5f5f5 !important;
     }
 
@@ -733,7 +735,10 @@ st.markdown(
         background-color: #ffffff !important;
     }
 
-    [data-testid="stSidebar"] button {
+    [data-testid="stSidebar"] button,
+    [data-testid="stSidebar"] button *,
+    [data-testid="stSidebar"] [role="button"],
+    [data-testid="stSidebar"] [role="button"] * {
         color: #111111 !important;
         background-color: #ffffff !important;
     }
@@ -776,8 +781,25 @@ st.markdown(
             min-height: 48px !important;
         }
 
+        .mobile-toggle-bar {
+            display: block !important;
+            margin-bottom: 0.6rem !important;
+        }
+
         [data-testid="stSidebar"] {
-            min-width: 100% !important;
+            display: none !important;
+        }
+
+        [data-testid="stSidebarNav"] {
+            display: none !important;
+        }
+
+        .mobile-toggle-bar button {
+            min-height: 50px !important;
+        }
+
+        .mobile-panel {
+            padding-top: 0.3rem !important;
         }
     }
     </style>
@@ -822,13 +844,16 @@ if "data" not in st.session_state:
 data = st.session_state["data"]
 
 
-with st.sidebar:
+def render_project_management_panel(panel_prefix="sidebar"):
     # 上部：日常利用の中心（一覧・フィルタ・選択）
     st.header("📌 物件一覧")
 
     if data["projects"]:
         st.caption("表示フィルタ")
-        filter_mode = st.radio("表示", ["すべて", "未対応あり", "重要度高あり"], key="filter_mode")
+        radio_key = "filter_mode" if panel_prefix == "sidebar" else f"{panel_prefix}_filter_mode"
+        default_index = ["すべて", "未対応あり", "重要度高あり"].index(st.session_state.get("filter_mode", "すべて"))
+        filter_mode = st.radio("表示", ["すべて", "未対応あり", "重要度高あり"], index=default_index, key=radio_key)
+        st.session_state["filter_mode"] = filter_mode
         save_app_state()
         st.caption("物件選択一覧")
 
@@ -844,7 +869,7 @@ with st.sidebar:
 
             label = f"{p.get('name', '')}｜未{open_count}｜高{high_count}"
 
-            if st.button(label, key=f"select_{p['id']}", use_container_width=True):
+            if st.button(label, key=f"{panel_prefix}_select_{p['id']}", use_container_width=True):
                 st.session_state["selected_project_id"] = p["id"]
                 save_app_state()
                 st.rerun()
@@ -861,6 +886,7 @@ with st.sidebar:
     st.session_state["folder_path_temp"] = st.text_input(
         "新規物件フォルダパス",
         value=st.session_state["folder_path_temp"],
+        key=f"{panel_prefix}_new_folder_path",
         label_visibility="collapsed",
     )
 
@@ -868,12 +894,13 @@ with st.sidebar:
     st.session_state["pdf_path_temp"] = st.text_input(
         "新規工程表PDFパス",
         value=st.session_state["pdf_path_temp"],
+        key=f"{panel_prefix}_new_pdf_path",
         label_visibility="collapsed",
     )
 
-    with st.form("add_project_form"):
-        name = st.text_input("物件名")
-        client = st.text_input("相手先・担当")
+    with st.form(f"{panel_prefix}_add_project_form"):
+        name = st.text_input("物件名", key=f"{panel_prefix}_project_name")
+        client = st.text_input("相手先・担当", key=f"{panel_prefix}_project_client")
         submitted = st.form_submit_button("物件を追加")
 
         if submitted:
@@ -909,11 +936,11 @@ with st.sidebar:
         st.session_state["show_storage_selector"] = st.session_state.get("app_settings") is None
 
     if st.session_state.get("app_settings") is not None:
-        if st.button("保存先を変更", use_container_width=True):
+        if st.button("保存先を変更", key=f"{panel_prefix}_change_storage", use_container_width=True):
             st.session_state["show_storage_selector"] = True
 
     if st.session_state.get("show_storage_selector", False):
-        with st.form("storage_settings_form"):
+        with st.form(f"{panel_prefix}_storage_settings_form"):
             storage_path = st.text_input(
                 "JSONファイルまたは保存フォルダ",
                 value=str(get_data_file()),
@@ -940,7 +967,7 @@ with st.sidebar:
         accept_multiple_files=False,
         help="bukken_data.json を選択してください。",
     )
-    if st.button("JSON読込", use_container_width=True):
+    if st.button("JSON読込", key=f"{panel_prefix}_json_load", use_container_width=True):
         if uploaded_json is None:
             st.warning("先にJSONファイルを選択してください。")
         else:
@@ -973,7 +1000,33 @@ with st.sidebar:
         file_name="bukken_data.json",
         mime="application/json",
         use_container_width=True,
+        key=f"{panel_prefix}_json_save",
     )
+
+
+with st.sidebar:
+    render_project_management_panel("sidebar")
+
+if "mobile_view" not in st.session_state:
+    st.session_state["mobile_view"] = "detail"
+
+st.markdown('<div class="mobile-toggle-bar">', unsafe_allow_html=True)
+mv1, mv2 = st.columns(2)
+with mv1:
+    if st.button("物件一覧", key="mobile_show_list", use_container_width=True):
+        st.session_state["mobile_view"] = "list"
+        st.rerun()
+with mv2:
+    if st.button("物件詳細", key="mobile_show_detail", use_container_width=True):
+        st.session_state["mobile_view"] = "detail"
+        st.rerun()
+st.markdown("</div>", unsafe_allow_html=True)
+
+if st.session_state.get("mobile_view") == "list":
+    st.markdown('<div class="mobile-panel">', unsafe_allow_html=True)
+    render_project_management_panel("mobile")
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
 
 
 if not data["projects"]:
