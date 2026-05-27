@@ -711,15 +711,40 @@ st.markdown(
         min-width: 340px !important;
     }
 
+    /* iPad・スマホのサイドバー文字色対策 */
+    [data-testid="stSidebar"] {
+        background-color: #262730 !important;
+    }
+
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h4,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div {
+        color: #f5f5f5 !important;
+    }
+
+    [data-testid="stSidebar"] input,
+    [data-testid="stSidebar"] textarea {
+        color: #111111 !important;
+        background-color: #ffffff !important;
+    }
+
+    [data-testid="stSidebar"] button {
+        color: #111111 !important;
+        background-color: #ffffff !important;
+    }
+
+    [data-testid="stSidebar"] small {
+        color: #dddddd !important;
+    }
+
     @media screen and (max-width: 1024px) {
         [data-testid="stSidebar"] {
-            background-color: #f7f7f7 !important;
-            color: #111111 !important;
             min-width: 320px !important;
-        }
-
-        [data-testid="stSidebar"] * {
-            color: #111111 !important;
         }
 
         .stButton button, .stDownloadButton button, button[kind="secondary"] {
