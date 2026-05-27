@@ -10,6 +10,11 @@ import urllib.parse
 from datetime import datetime, date
 from pathlib import Path
 
+try:
+    from streamlit_local_storage import LocalStorage
+except Exception:
+    LocalStorage = None
+
 APP_TITLE = "物件管理アプリ"
 DEFAULT_DATA_DIR = Path(r"C:\構造設計メモ管理データ")
 LOCAL_DATA_DIR = Path(__file__).resolve().parent / "data"
@@ -17,6 +22,47 @@ DATA_FILE_NAME = "bukken_data.json"
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高"]
+
+LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
+
+
+def get_local_storage_data():
+    if LocalStorage is None:
+        return None
+
+    try:
+        local_storage = LocalStorage()
+        raw = local_storage.getItem(LOCAL_STORAGE_KEY)
+        if not raw:
+            return None
+        return normalize_data(json.loads(raw))
+    except Exception:
+        return None
+
+
+def save_local_storage_data(data):
+    if LocalStorage is None:
+        return
+
+    try:
+        local_storage = LocalStorage()
+        local_storage.setItem(LOCAL_STORAGE_KEY, json.dumps(normalize_data(data), ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def persist_data(data):
+    normalized = normalize_data(data)
+    st.session_state["data"] = normalized
+    save_data(normalized)
+    save_local_storage_data(normalized)
+
+
+def load_initial_data():
+    local_data = get_local_storage_data()
+    if local_data is not None:
+        return local_data
+    return load_data()
 
 
 def get_data_dir():
@@ -512,7 +558,7 @@ if "show_structural_memo_editor" not in st.session_state:
 
 
 if "data" not in st.session_state:
-    st.session_state["data"] = load_data()
+    st.session_state["data"] = load_initial_data()
 
 data = st.session_state["data"]
 
@@ -538,6 +584,7 @@ with st.sidebar:
                     uploaded_data = json.loads(raw_json.decode("utf-8-sig"))
 
                 st.session_state["data"] = normalize_data(uploaded_data)
+                save_local_storage_data(st.session_state["data"])
                 if st.session_state["data"]["projects"]:
                     st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
                 else:
@@ -615,7 +662,7 @@ with st.sidebar:
                 }
 
                 data["projects"].append(new_project)
-                save_data(data)
+                persist_data(data)
 
                 st.session_state["selected_project_id"] = new_project["id"]
                 st.session_state["folder_path_temp"] = ""
@@ -736,7 +783,7 @@ if st.session_state["show_structural_memo_editor"]:
         if st.button("💾 メモを保存", key=f"save_structural_memo_body_{project['id']}"):
             project["structural_memo"] = structural_memo_text
             project["structural_memo_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            save_data(data)
+            persist_data(data)
             st.success("構造設計メモを保存しました。")
             st.rerun()
 
@@ -853,7 +900,7 @@ else:
                     log["content"] = edit_content.strip()
                     log["attachment_path"] = edit_attach.strip()
 
-                    save_data(data)
+                    persist_data(data)
 
                     st.session_state["editing_log_id"] = None
 
@@ -879,7 +926,7 @@ else:
 
             with c2:
                 if st.button("✔保存", key=f"save_{log['id']}"):
-                    save_data(data)
+                    persist_data(data)
                     st.success("保存しました。")
                     st.rerun()
 
@@ -888,7 +935,7 @@ else:
                     project["logs"] = [
                         x for x in project["logs"] if x["id"] != log["id"]
                     ]
-                    save_data(data)
+                    persist_data(data)
                     st.warning("削除しました。")
                     st.rerun()
 
@@ -952,7 +999,7 @@ with st.form("add_log_form"):
                 }
             )
 
-            save_data(data)
+            persist_data(data)
 
             st.session_state["new_attachment_path"] = ""
 
@@ -992,7 +1039,7 @@ with st.expander("物件名・相手先を編集"):
         if update_project:
             project["name"] = edit_name.strip()
             project["client"] = edit_client.strip()
-            save_data(data)
+            persist_data(data)
             st.success("物件情報を保存しました。")
             st.rerun()
 
@@ -1020,7 +1067,7 @@ with st.expander("🔗 現在の物件のパス設定"):
         if st.button("💾 現在の物件にパスを保存", type="primary"):
             project["folder_path"] = st.session_state[current_folder_key].strip()
             project["schedule_pdf_path"] = st.session_state[current_pdf_key].strip()
-            save_data(data)
+            persist_data(data)
             st.success("現在の物件にパスを保存しました。")
             st.rerun()
 
