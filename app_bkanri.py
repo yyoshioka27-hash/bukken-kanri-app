@@ -853,7 +853,6 @@ def render_project_management_panel(panel_prefix="sidebar"):
         radio_key = "filter_mode" if panel_prefix == "sidebar" else f"{panel_prefix}_filter_mode"
         default_index = ["すべて", "未対応あり", "重要度高あり"].index(st.session_state.get("filter_mode", "すべて"))
         filter_mode = st.radio("表示", ["すべて", "未対応あり", "重要度高あり"], index=default_index, key=radio_key)
-        st.session_state["filter_mode"] = filter_mode
         save_app_state()
         st.caption("物件選択一覧")
 
