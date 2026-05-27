@@ -24,6 +24,7 @@ STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高"]
 
 LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
+JOIN_CONFIG_STORAGE_KEY = "bukken_kanri_join_config_v1"
 
 
 def get_local_storage_data():
@@ -56,6 +57,103 @@ def persist_data(data):
     st.session_state["data"] = normalized
     save_data(normalized)
     save_local_storage_data(normalized)
+
+
+def normalize_join_config(config):
+    if not isinstance(config, dict):
+        return None
+    data_dir = str(config.get("data_dir", "")).strip()
+    shared_enabled = bool(config.get("shared_enabled", False))
+    property_source = str(config.get("property_source", "保存済みJSON")).strip() or "保存済みJSON"
+    if not data_dir:
+        return None
+    return {
+        "data_dir": data_dir,
+        "shared_enabled": shared_enabled,
+        "property_source": property_source,
+    }
+
+
+def save_join_config_local(config):
+    if LocalStorage is None:
+        return
+    try:
+        local_storage = LocalStorage()
+        local_storage.setItem(JOIN_CONFIG_STORAGE_KEY, json.dumps(config, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def get_join_config_local():
+    if LocalStorage is None:
+        return None
+    try:
+        local_storage = LocalStorage()
+        raw = local_storage.getItem(JOIN_CONFIG_STORAGE_KEY)
+        if not raw:
+            return None
+        return normalize_join_config(json.loads(raw))
+    except Exception:
+        return None
+
+
+def save_join_config(config):
+    normalized = normalize_join_config(config)
+    if normalized is None:
+        return
+    st.session_state["join_config"] = normalized
+    st.session_state["data_dir"] = normalized["data_dir"]
+    st.query_params["join_data_dir"] = normalized["data_dir"]
+    st.query_params["join_shared"] = "1" if normalized["shared_enabled"] else "0"
+    st.query_params["join_property_source"] = normalized["property_source"]
+    save_join_config_local(normalized)
+
+
+def clear_join_config():
+    st.session_state.pop("join_config", None)
+    st.session_state.pop("data_dir", None)
+    st.query_params.clear()
+    if LocalStorage is not None:
+        try:
+            local_storage = LocalStorage()
+            local_storage.deleteItem(JOIN_CONFIG_STORAGE_KEY)
+        except Exception:
+            pass
+
+
+def restore_join_config():
+    if "join_config" in st.session_state:
+        cfg = normalize_join_config(st.session_state["join_config"])
+        if cfg:
+            st.session_state["data_dir"] = cfg["data_dir"]
+            return cfg
+
+    params = st.query_params
+    q_data_dir = str(params.get("join_data_dir", "")).strip()
+    if q_data_dir:
+        cfg = normalize_join_config(
+            {
+                "data_dir": q_data_dir,
+                "shared_enabled": str(params.get("join_shared", "0")) in ["1", "true", "True"],
+                "property_source": str(params.get("join_property_source", "保存済みJSON")),
+            }
+        )
+        if cfg:
+            st.session_state["join_config"] = cfg
+            st.session_state["data_dir"] = cfg["data_dir"]
+            save_join_config_local(cfg)
+            return cfg
+
+    cfg = get_join_config_local()
+    if cfg:
+        st.session_state["join_config"] = cfg
+        st.session_state["data_dir"] = cfg["data_dir"]
+        st.query_params["join_data_dir"] = cfg["data_dir"]
+        st.query_params["join_shared"] = "1" if cfg["shared_enabled"] else "0"
+        st.query_params["join_property_source"] = cfg["property_source"]
+        return cfg
+
+    return None
 
 
 def load_initial_data():
@@ -558,12 +656,71 @@ if "show_structural_memo_editor" not in st.session_state:
 
 
 if "data" not in st.session_state:
-    st.session_state["data"] = load_initial_data()
+    join_config = restore_join_config()
+    if join_config is not None:
+        st.session_state["data"] = load_initial_data()
+    else:
+        st.session_state["data"] = {"projects": []}
 
 data = st.session_state["data"]
 
 
 with st.sidebar:
+    join_config = st.session_state.get("join_config")
+
+    st.header("🔗 JOIN設定")
+    if join_config:
+        st.caption(
+            f"JSON読込先: {join_config['data_dir']} / "
+            f"共有データ: {'ON' if join_config['shared_enabled'] else 'OFF'} / "
+            f"参照先: {join_config['property_source']}"
+        )
+        col_join_1, col_join_2 = st.columns(2)
+        with col_join_1:
+            if st.button("JOIN設定を変更", use_container_width=True):
+                st.session_state["show_join_form"] = True
+        with col_join_2:
+            if st.button("JOIN設定をリセット", use_container_width=True):
+                clear_join_config()
+                st.session_state["data"] = {"projects": []}
+                st.success("JOIN設定をリセットしました。")
+                st.rerun()
+    else:
+        st.session_state["show_join_form"] = True
+
+    if st.session_state.get("show_join_form", False):
+        with st.form("join_settings_form"):
+            join_data_dir = st.text_input(
+                "JSON読込先フォルダ",
+                value=(join_config or {}).get("data_dir", str(get_data_dir())),
+                help="例: C:\\構造設計メモ管理データ",
+            )
+            join_shared_enabled = st.checkbox(
+                "共有データ設定を有効化",
+                value=(join_config or {}).get("shared_enabled", False),
+            )
+            join_property_source = st.selectbox(
+                "物件データ参照先",
+                ["保存済みJSON", "アップロードJSON優先"],
+                index=0 if (join_config or {}).get("property_source", "保存済みJSON") == "保存済みJSON" else 1,
+            )
+            if st.form_submit_button("JOINして保存", use_container_width=True):
+                cfg = normalize_join_config(
+                    {
+                        "data_dir": join_data_dir,
+                        "shared_enabled": join_shared_enabled,
+                        "property_source": join_property_source,
+                    }
+                )
+                if cfg is None:
+                    st.error("JSON読込先フォルダを入力してください。")
+                else:
+                    save_join_config(cfg)
+                    st.session_state["show_join_form"] = False
+                    st.session_state["data"] = load_initial_data()
+                    st.success("JOIN設定を保存しました。次回起動時も自動復元されます。")
+                    st.rerun()
+
     st.header("📌 物件一覧")
 
     uploaded_json = st.file_uploader(
