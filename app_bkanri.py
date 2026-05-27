@@ -11,41 +11,71 @@ from datetime import datetime, date
 from pathlib import Path
 
 APP_TITLE = "物件管理アプリ"
-DATA_DIR = Path(r"C:\構造設計メモ管理データ")
-DATA_FILE = DATA_DIR / "bukken_data.json"
-BACKUP_DIR = DATA_DIR / "backup"
-EXPORT_TEXT_DIR = DATA_DIR / "export_text"
+DEFAULT_DATA_DIR = Path(r"C:\構造設計メモ管理データ")
+LOCAL_DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_FILE_NAME = "bukken_data.json"
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高"]
 
 
+def get_data_dir():
+    if "data_dir" in st.session_state:
+        return Path(st.session_state["data_dir"])
+    if DEFAULT_DATA_DIR.exists():
+        return DEFAULT_DATA_DIR
+    return LOCAL_DATA_DIR
+
+
+def get_data_file():
+    return get_data_dir() / DATA_FILE_NAME
+
+
+def get_backup_dir():
+    return get_data_dir() / "backup"
+
+
+def get_export_text_dir():
+    return get_data_dir() / "export_text"
+
+
 def init_dirs():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    EXPORT_TEXT_DIR.mkdir(parents=True, exist_ok=True)
+    data_dir = get_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    get_backup_dir().mkdir(parents=True, exist_ok=True)
+    get_export_text_dir().mkdir(parents=True, exist_ok=True)
+
+
+def normalize_data(data):
+    if not isinstance(data, dict):
+        return {"projects": []}
+    if "projects" not in data or not isinstance(data["projects"], list):
+        data["projects"] = []
+    return data
 
 
 def load_data():
     init_dirs()
-    if not DATA_FILE.exists():
+    data_file = get_data_file()
+    if not data_file.exists():
         return {"projects": []}
     try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
+        with open(data_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if "projects" not in data:
-            data["projects"] = []
-        return data
+        return normalize_data(data)
     except Exception:
         return {"projects": []}
 
 
 def save_data(data):
     init_dirs()
-    if DATA_FILE.exists():
+    data = normalize_data(data)
+    data_file = get_data_file()
+    backup_dir = get_backup_dir()
+    if data_file.exists():
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        shutil.copy2(DATA_FILE, BACKUP_DIR / f"bukken_data_{ts}.json")
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        shutil.copy2(data_file, backup_dir / f"bukken_data_{ts}.json")
+    with open(data_file, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
@@ -132,7 +162,7 @@ def save_structural_memo_text(project):
     memo_text = build_structural_memo_text(project)
     today = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_name = sanitize_windows_filename(project.get("name", "project"))
-    file_path = EXPORT_TEXT_DIR / f"{safe_name}_構造設計メモ_{today}.txt"
+    file_path = get_export_text_dir() / f"{safe_name}_構造設計メモ_{today}.txt"
 
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(memo_text)
@@ -404,7 +434,6 @@ with button_col:
     st.write("")
     st.link_button("📅 カレンダー", calendar_url, use_container_width=True)
 
-data = load_data()
 
 if "selected_project_id" not in st.session_state:
     st.session_state["selected_project_id"] = None
@@ -425,8 +454,44 @@ if "show_structural_memo_editor" not in st.session_state:
     st.session_state["show_structural_memo_editor"] = False
 
 
+if "data" not in st.session_state:
+    st.session_state["data"] = load_data()
+
+data = st.session_state["data"]
+
+
 with st.sidebar:
     st.header("📌 物件一覧")
+
+    uploaded_json = st.file_uploader(
+        "JSON読込",
+        type=["json"],
+        accept_multiple_files=False,
+        help="bukken_data.json を選択してください。",
+    )
+    if st.button("JSON読込", use_container_width=True):
+        if uploaded_json is None:
+            st.warning("先にJSONファイルを選択してください。")
+        else:
+            try:
+                uploaded_data = json.loads(uploaded_json.getvalue().decode("utf-8"))
+                st.session_state["data"] = normalize_data(uploaded_data)
+                if st.session_state["data"]["projects"]:
+                    st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
+                else:
+                    st.session_state["selected_project_id"] = None
+                st.success("JSONを読み込みました。")
+                st.rerun()
+            except Exception:
+                st.error("JSONの読み込みに失敗しました。形式を確認してください。")
+
+    st.download_button(
+        "JSON保存",
+        data=json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
+        file_name="bukken_data.json",
+        mime="application/json",
+        use_container_width=True,
+    )
 
     if data["projects"]:
         filter_mode = st.radio("表示", ["すべて", "未対応あり", "重要度高あり"])
@@ -498,7 +563,7 @@ with st.sidebar:
                 st.rerun()
 
     st.divider()
-    st.caption(f"保存先：{DATA_FILE}")
+    st.caption(f"保存先：{get_data_file()}")
 
 
 if not data["projects"]:
