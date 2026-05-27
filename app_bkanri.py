@@ -747,6 +747,34 @@ st.markdown(
         color: #dddddd !important;
     }
 
+    /* iPad/Safari の selectbox 文字色修正 */
+    div[data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        color: #111111 !important;
+    }
+
+    div[data-baseweb="select"] span {
+        color: #111111 !important;
+    }
+
+    div[data-baseweb="select"] input {
+        color: #111111 !important;
+    }
+
+    /* ドロップダウン一覧 */
+    ul[role="listbox"] {
+        background-color: #ffffff !important;
+    }
+
+    ul[role="listbox"] li {
+        color: #111111 !important;
+        background-color: #ffffff !important;
+    }
+
+    ul[role="listbox"] li:hover {
+        background-color: #e6f0ff !important;
+    }
+
     @media screen and (max-width: 1024px) {
         [data-testid="stSidebar"] {
             min-width: 320px !important;
