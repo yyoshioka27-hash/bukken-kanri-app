@@ -25,7 +25,7 @@ PRIORITIES = ["低", "中", "高"]
 
 LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
 APP_STATE_STORAGE_KEY = "bukken_kanri_app_state_v1"
-JOIN_CONFIG_STORAGE_KEY = "bukken_kanri_join_config_v1"
+APP_SETTINGS_FILE = Path(__file__).resolve().parent / "app_settings.json"
 
 
 def get_local_storage_data():
@@ -103,102 +103,70 @@ def load_app_state():
         return None
 
 
-def normalize_join_config(config):
-    if not isinstance(config, dict):
+def normalize_app_settings(settings):
+    if not isinstance(settings, dict):
         return None
-    data_dir = str(config.get("data_dir", "")).strip()
-    shared_enabled = bool(config.get("shared_enabled", False))
-    property_source = str(config.get("property_source", "保存済みJSON")).strip() or "保存済みJSON"
-    if not data_dir:
+    data_file_path = str(settings.get("data_file_path", "")).strip()
+    if not data_file_path:
         return None
-    return {
-        "data_dir": data_dir,
-        "shared_enabled": shared_enabled,
-        "property_source": property_source,
-    }
+    return {"data_file_path": data_file_path}
 
 
-def save_join_config_local(config):
-    if LocalStorage is None:
+def load_app_settings():
+    if not APP_SETTINGS_FILE.exists():
+        return None
+    try:
+        with open(APP_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return normalize_app_settings(json.load(f))
+    except Exception:
+        return None
+
+
+def save_app_settings(data_file_path):
+    settings = normalize_app_settings({"data_file_path": data_file_path})
+    if settings is None:
         return
     try:
-        local_storage = LocalStorage()
-        local_storage.setItem(JOIN_CONFIG_STORAGE_KEY, json.dumps(config, ensure_ascii=False))
+        with open(APP_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+    st.session_state["app_settings"] = settings
+    st.session_state["data_file_path"] = settings["data_file_path"]
 
 
-def get_join_config_local():
-    if LocalStorage is None:
-        return None
-    try:
-        local_storage = LocalStorage()
-        raw = local_storage.getItem(JOIN_CONFIG_STORAGE_KEY)
-        if not raw:
-            return None
-        return normalize_join_config(json.loads(raw))
-    except Exception:
-        return None
-
-
-def save_join_config(config):
-    normalized = normalize_join_config(config)
-    if normalized is None:
-        return
-    st.session_state["join_config"] = normalized
-    st.session_state["data_dir"] = normalized["data_dir"]
-    st.query_params["join_data_dir"] = normalized["data_dir"]
-    st.query_params["join_shared"] = "1" if normalized["shared_enabled"] else "0"
-    st.query_params["join_property_source"] = normalized["property_source"]
-    save_join_config_local(normalized)
-
-
-def clear_join_config():
-    st.session_state.pop("join_config", None)
-    st.session_state.pop("data_dir", None)
-    st.query_params.clear()
-    if LocalStorage is not None:
+def clear_app_settings():
+    st.session_state.pop("app_settings", None)
+    st.session_state.pop("data_file_path", None)
+    if APP_SETTINGS_FILE.exists():
         try:
-            local_storage = LocalStorage()
-            local_storage.deleteItem(JOIN_CONFIG_STORAGE_KEY)
+            APP_SETTINGS_FILE.unlink()
         except Exception:
             pass
 
 
-def restore_join_config():
-    if "join_config" in st.session_state:
-        cfg = normalize_join_config(st.session_state["join_config"])
-        if cfg:
-            st.session_state["data_dir"] = cfg["data_dir"]
-            return cfg
+def resolve_data_file_path(path_text):
+    if not path_text:
+        return None
+    p = Path(str(path_text).strip().strip('"').strip("'"))
+    if p.suffix.lower() == ".json":
+        return p
+    return p / DATA_FILE_NAME
 
-    params = st.query_params
-    q_data_dir = str(params.get("join_data_dir", "")).strip()
-    if q_data_dir:
-        cfg = normalize_join_config(
-            {
-                "data_dir": q_data_dir,
-                "shared_enabled": str(params.get("join_shared", "0")) in ["1", "true", "True"],
-                "property_source": str(params.get("join_property_source", "保存済みJSON")),
-            }
-        )
-        if cfg:
-            st.session_state["join_config"] = cfg
-            st.session_state["data_dir"] = cfg["data_dir"]
-            save_join_config_local(cfg)
-            return cfg
 
-    cfg = get_join_config_local()
-    if cfg:
-        st.session_state["join_config"] = cfg
-        st.session_state["data_dir"] = cfg["data_dir"]
-        st.query_params["join_data_dir"] = cfg["data_dir"]
-        st.query_params["join_shared"] = "1" if cfg["shared_enabled"] else "0"
-        st.query_params["join_property_source"] = cfg["property_source"]
-        return cfg
+def restore_app_settings():
+    if "app_settings" in st.session_state:
+        settings = normalize_app_settings(st.session_state["app_settings"])
+        if settings:
+            st.session_state["data_file_path"] = settings["data_file_path"]
+            return settings
 
+    settings = load_app_settings()
+    if settings:
+        st.session_state["app_settings"] = settings
+        st.session_state["data_file_path"] = settings["data_file_path"]
+        return settings
     return None
-
 
 def load_initial_data():
     app_state = load_app_state()
@@ -213,16 +181,14 @@ def load_initial_data():
     return load_data()
 
 
-def get_data_dir():
-    if "data_dir" in st.session_state:
-        return Path(st.session_state["data_dir"])
-    if DEFAULT_DATA_DIR.exists():
-        return DEFAULT_DATA_DIR
-    return LOCAL_DATA_DIR
-
-
 def get_data_file():
-    return get_data_dir() / DATA_FILE_NAME
+    if "data_file_path" in st.session_state:
+        return Path(st.session_state["data_file_path"])
+    return LOCAL_DATA_DIR / DATA_FILE_NAME
+
+
+def get_data_dir():
+    return get_data_file().parent
 
 
 def get_backup_dir():
@@ -740,8 +706,8 @@ if "filter_mode" not in st.session_state:
     st.session_state["filter_mode"] = "すべて"
 
 if "data" not in st.session_state:
-    join_config = restore_join_config()
-    if join_config is not None:
+    app_settings = restore_app_settings()
+    if app_settings is not None:
         st.session_state["data"] = load_initial_data()
     else:
         st.session_state["data"] = {"projects": []}
@@ -750,8 +716,6 @@ data = st.session_state["data"]
 
 
 with st.sidebar:
-    join_config = st.session_state.get("join_config")
-
     # 上部：日常利用の中心（一覧・フィルタ・選択）
     st.header("📌 物件一覧")
 
@@ -831,61 +795,34 @@ with st.sidebar:
 
     st.divider()
 
-    # 下段：JOIN関連を最下部に集約
-    st.header("🔗 JOIN設定")
-    if join_config:
-        st.caption(
-            f"JSON読込先: {join_config['data_dir']} / "
-            f"共有データ: {'ON' if join_config['shared_enabled'] else 'OFF'} / "
-            f"参照先: {join_config['property_source']}"
-        )
-        col_join_1, col_join_2 = st.columns(2)
-        with col_join_1:
-            if st.button("JOIN設定を変更", use_container_width=True):
-                st.session_state["show_join_form"] = True
-        with col_join_2:
-            if st.button("JOIN設定をリセット", use_container_width=True):
-                clear_join_config()
-                st.session_state["data"] = {"projects": []}
-                st.success("JOIN設定をリセットしました。")
-                st.rerun()
-    else:
-        st.session_state["show_join_form"] = True
+    st.header("📂 現在の保存先")
+    st.caption(str(get_data_file()))
 
-    if st.session_state.get("show_join_form", False):
-        with st.form("join_settings_form"):
-            join_data_dir = st.text_input(
-                "JSON読込先フォルダ",
-                value=(join_config or {}).get("data_dir", str(get_data_dir())),
-                help="例: C:\\構造設計メモ管理データ",
+    if "show_storage_selector" not in st.session_state:
+        st.session_state["show_storage_selector"] = st.session_state.get("app_settings") is None
+
+    if st.session_state.get("app_settings") is not None:
+        if st.button("保存先を変更", use_container_width=True):
+            st.session_state["show_storage_selector"] = True
+
+    if st.session_state.get("show_storage_selector", False):
+        with st.form("storage_settings_form"):
+            storage_path = st.text_input(
+                "JSONファイルまたは保存フォルダ",
+                value=str(get_data_file()),
+                help="例: C:\\構造設計メモ管理データ\\bukken_data.json または C:\\構造設計メモ管理データ",
             )
-            join_shared_enabled = st.checkbox(
-                "共有データ設定を有効化",
-                value=(join_config or {}).get("shared_enabled", False),
-            )
-            join_property_source = st.selectbox(
-                "物件データ参照先",
-                ["保存済みJSON", "アップロードJSON優先"],
-                index=0 if (join_config or {}).get("property_source", "保存済みJSON") == "保存済みJSON" else 1,
-            )
-            if st.form_submit_button("JOINして保存", use_container_width=True):
-                cfg = normalize_join_config(
-                    {
-                        "data_dir": join_data_dir,
-                        "shared_enabled": join_shared_enabled,
-                        "property_source": join_property_source,
-                    }
-                )
-                if cfg is None:
-                    st.error("JSON読込先フォルダを入力してください。")
+            if st.form_submit_button("保存先を確定", use_container_width=True):
+                resolved = resolve_data_file_path(storage_path)
+                if resolved is None:
+                    st.error("保存先を入力してください。")
                 else:
-                    save_join_config(cfg)
-                    st.session_state["show_join_form"] = False
+                    save_app_settings(str(resolved))
+                    st.session_state["show_storage_selector"] = False
                     st.session_state["data"] = load_initial_data()
-                    st.success("JOIN設定を保存しました。次回起動時も自動復元されます。")
+                    st.success("保存先を保存しました。次回起動時も自動で読み込みます。")
                     st.rerun()
 
-    st.caption(f"保存先：{get_data_file()}")
     st.divider()
 
     # 最下部：読込・保存関連
@@ -906,18 +843,6 @@ with st.sidebar:
                     uploaded_data = json.loads(raw_json.decode("utf-8"))
                 except UnicodeDecodeError:
                     uploaded_data = json.loads(raw_json.decode("utf-8-sig"))
-
-                # 1回JSON読込した時点で、既定保存先を記憶して自動復元対象にする
-                default_join_config = normalize_join_config(
-                    {
-                        "data_dir": str(DEFAULT_DATA_DIR),
-                        "shared_enabled": True,
-                        "property_source": "保存済みJSON",
-                    }
-                )
-                if default_join_config is not None:
-                    save_join_config(default_join_config)
-                    st.session_state["show_join_form"] = False
 
                 st.session_state["data"] = normalize_data(uploaded_data)
                 if st.session_state["data"]["projects"]:
