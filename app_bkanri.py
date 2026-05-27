@@ -7,8 +7,6 @@ import shutil
 import uuid
 import html
 import urllib.parse
-import tkinter as tk
-from tkinter import filedialog
 from datetime import datetime, date
 from pathlib import Path
 
@@ -140,43 +138,6 @@ def save_structural_memo_text(project):
         f.write(memo_text)
 
     return file_path, memo_text
-
-
-def browse_folder():
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    folder = filedialog.askdirectory()
-    root.destroy()
-    return folder
-
-
-def browse_pdf():
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    file_path = filedialog.askopenfilename(
-        filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
-    )
-    root.destroy()
-    return file_path
-
-
-def browse_any_file():
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    file_path = filedialog.askopenfilename(
-        filetypes=[
-            ("All files", "*.*"),
-            ("PDF files", "*.pdf"),
-            ("Excel files", "*.xlsx;*.xls"),
-            ("Word files", "*.docx"),
-            ("Text files", "*.txt"),
-        ]
-    )
-    root.destroy()
-    return file_path
 
 
 def get_project(data, project_id):
@@ -494,38 +455,18 @@ with st.sidebar:
     st.header("➕ 新規物件登録")
 
     st.write("物件フォルダ")
-    fc1, fc2 = st.columns([4, 1])
-
-    with fc1:
-        st.session_state["folder_path_temp"] = st.text_input(
-            "新規物件フォルダパス",
-            value=st.session_state["folder_path_temp"],
-            label_visibility="collapsed",
-        )
-
-    with fc2:
-        if st.button("参照📂", key="new_folder_ref"):
-            selected_folder = browse_folder()
-            if selected_folder:
-                st.session_state["folder_path_temp"] = selected_folder
-                st.rerun()
+    st.session_state["folder_path_temp"] = st.text_input(
+        "新規物件フォルダパス",
+        value=st.session_state["folder_path_temp"],
+        label_visibility="collapsed",
+    )
 
     st.write("工程表PDF")
-    pc1, pc2 = st.columns([4, 1])
-
-    with pc1:
-        st.session_state["pdf_path_temp"] = st.text_input(
-            "新規工程表PDFパス",
-            value=st.session_state["pdf_path_temp"],
-            label_visibility="collapsed",
-        )
-
-    with pc2:
-        if st.button("参照📄", key="new_pdf_ref"):
-            selected_pdf = browse_pdf()
-            if selected_pdf:
-                st.session_state["pdf_path_temp"] = selected_pdf
-                st.rerun()
+    st.session_state["pdf_path_temp"] = st.text_input(
+        "新規工程表PDFパス",
+        value=st.session_state["pdf_path_temp"],
+        label_visibility="collapsed",
+    )
 
     with st.form("add_project_form"):
         name = st.text_input("物件名")
@@ -842,21 +783,10 @@ else:
 
 st.subheader("📝 やり取りを追加")
 
-ap1, ap2 = st.columns([5, 1])
-
-with ap1:
-    st.session_state["new_attachment_path"] = st.text_input(
-        "添付ファイルパス",
-        value=st.session_state["new_attachment_path"],
-    )
-
-with ap2:
-    st.write("")
-    if st.button("参照📎"):
-        selected_file = browse_any_file()
-        if selected_file:
-            st.session_state["new_attachment_path"] = selected_file
-            st.rerun()
+st.session_state["new_attachment_path"] = st.text_input(
+    "添付ファイルパス",
+    value=st.session_state["new_attachment_path"],
+)
 
 
 with st.form("add_log_form"):
@@ -944,38 +874,18 @@ st.divider()
 
 with st.expander("🔗 現在の物件のパス設定"):
     st.write("物件フォルダ")
-    pf1, pf2 = st.columns([5, 1])
-
-    with pf1:
-        st.session_state[current_folder_key] = st.text_input(
-            "現在の物件フォルダパス",
-            value=st.session_state[current_folder_key],
-            label_visibility="collapsed",
-        )
-
-    with pf2:
-        if st.button("参照📂", key=f"current_folder_ref_{project['id']}"):
-            selected_folder = browse_folder()
-            if selected_folder:
-                st.session_state[current_folder_key] = selected_folder
-                st.rerun()
+    st.session_state[current_folder_key] = st.text_input(
+        "現在の物件フォルダパス",
+        value=st.session_state[current_folder_key],
+        label_visibility="collapsed",
+    )
 
     st.write("工程表PDF")
-    pp1, pp2 = st.columns([5, 1])
-
-    with pp1:
-        st.session_state[current_pdf_key] = st.text_input(
-            "現在の工程表PDFパス",
-            value=st.session_state[current_pdf_key],
-            label_visibility="collapsed",
-        )
-
-    with pp2:
-        if st.button("参照📄", key=f"current_pdf_ref_{project['id']}"):
-            selected_pdf = browse_pdf()
-            if selected_pdf:
-                st.session_state[current_pdf_key] = selected_pdf
-                st.rerun()
+    st.session_state[current_pdf_key] = st.text_input(
+        "現在の工程表PDFパス",
+        value=st.session_state[current_pdf_key],
+        label_visibility="collapsed",
+    )
 
     save_col, open_folder_col, open_pdf_col = st.columns([1, 1, 1])
 
