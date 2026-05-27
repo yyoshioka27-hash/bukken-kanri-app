@@ -907,15 +907,30 @@ with st.sidebar:
                 except UnicodeDecodeError:
                     uploaded_data = json.loads(raw_json.decode("utf-8-sig"))
 
+                # 1回JSON読込した時点で、既定保存先を記憶して自動復元対象にする
+                default_join_config = normalize_join_config(
+                    {
+                        "data_dir": str(DEFAULT_DATA_DIR),
+                        "shared_enabled": True,
+                        "property_source": "保存済みJSON",
+                    }
+                )
+                if default_join_config is not None:
+                    save_join_config(default_join_config)
+                    st.session_state["show_join_form"] = False
+
                 st.session_state["data"] = normalize_data(uploaded_data)
                 if st.session_state["data"]["projects"]:
                     st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
                 else:
                     st.session_state["selected_project_id"] = None
+
+                # 読込直後に保存済みJSONとして即時登録（JOINボタン不要）
                 save_data(st.session_state["data"])
                 save_local_storage_data(st.session_state["data"])
                 save_app_state()
-                st.success("JSONを読み込みました。次回起動時も自動で復元されます。")
+
+                st.success("JSONを読み込み、保存済みJSONとして登録しました。次回起動時は自動復元されます。")
                 st.rerun()
             except Exception:
                 st.error("JSONの読み込みに失敗しました。形式を確認してください。")
