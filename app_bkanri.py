@@ -24,6 +24,7 @@ STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高"]
 
 LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
+APP_STATE_STORAGE_KEY = "bukken_kanri_app_state_v1"
 JOIN_CONFIG_STORAGE_KEY = "bukken_kanri_join_config_v1"
 
 
@@ -57,6 +58,49 @@ def persist_data(data):
     st.session_state["data"] = normalized
     save_data(normalized)
     save_local_storage_data(normalized)
+    save_app_state()
+
+
+def normalize_filter_mode(value):
+    valid_modes = ["すべて", "未対応あり", "重要度高あり"]
+    return value if value in valid_modes else "すべて"
+
+
+def save_app_state():
+    if LocalStorage is None:
+        return
+
+    try:
+        local_storage = LocalStorage()
+        payload = {
+            "data": normalize_data(st.session_state.get("data", {"projects": []})),
+            "selected_project_id": st.session_state.get("selected_project_id"),
+            "filter_mode": normalize_filter_mode(st.session_state.get("filter_mode", "すべて")),
+        }
+        local_storage.setItem(APP_STATE_STORAGE_KEY, json.dumps(payload, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def load_app_state():
+    if LocalStorage is None:
+        return None
+
+    try:
+        local_storage = LocalStorage()
+        raw = local_storage.getItem(APP_STATE_STORAGE_KEY)
+        if not raw:
+            return None
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            return None
+        return {
+            "data": normalize_data(payload.get("data", {"projects": []})),
+            "selected_project_id": payload.get("selected_project_id"),
+            "filter_mode": normalize_filter_mode(payload.get("filter_mode", "すべて")),
+        }
+    except Exception:
+        return None
 
 
 def normalize_join_config(config):
@@ -157,6 +201,12 @@ def restore_join_config():
 
 
 def load_initial_data():
+    app_state = load_app_state()
+    if app_state is not None:
+        st.session_state["selected_project_id"] = app_state.get("selected_project_id")
+        st.session_state["filter_mode"] = app_state.get("filter_mode", "すべて")
+        return app_state.get("data", {"projects": []})
+
     local_data = get_local_storage_data()
     if local_data is not None:
         return local_data
@@ -603,12 +653,21 @@ st.markdown(
         background-color: #f5f5f5 !important;
         color: #111111 !important;
         border: 1px solid #bdbdbd !important;
+        width: 100% !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+        line-height: 1.4 !important;
+    }
+
+    [data-testid="stSidebar"] {
+        min-width: 340px !important;
     }
 
     @media screen and (max-width: 1024px) {
         [data-testid="stSidebar"] {
             background-color: #f7f7f7 !important;
             color: #111111 !important;
+            min-width: 320px !important;
         }
 
         [data-testid="stSidebar"] * {
@@ -619,6 +678,8 @@ st.markdown(
             background-color: #f5f5f5 !important;
             color: #111111 !important;
             border: 1px solid #9e9e9e !important;
+            font-size: 16px !important;
+            min-height: 46px !important;
         }
     }
 
@@ -640,6 +701,10 @@ st.markdown(
         .stButton button, .stDownloadButton button {
             width: 100% !important;
             min-height: 48px !important;
+        }
+
+        [data-testid="stSidebar"] {
+            min-width: 100% !important;
         }
     }
     </style>
@@ -671,6 +736,8 @@ if "editing_log_id" not in st.session_state:
 if "show_structural_memo_editor" not in st.session_state:
     st.session_state["show_structural_memo_editor"] = False
 
+if "filter_mode" not in st.session_state:
+    st.session_state["filter_mode"] = "すべて"
 
 if "data" not in st.session_state:
     join_config = restore_join_config()
@@ -688,45 +755,10 @@ with st.sidebar:
     # 上部：日常利用の中心（一覧・フィルタ・選択）
     st.header("📌 物件一覧")
 
-    uploaded_json = st.file_uploader(
-        "JSON読込",
-        type=["json"],
-        accept_multiple_files=False,
-        help="bukken_data.json を選択してください。",
-    )
-    if st.button("JSON読込", use_container_width=True):
-        if uploaded_json is None:
-            st.warning("先にJSONファイルを選択してください。")
-        else:
-            try:
-                raw_json = uploaded_json.getvalue()
-                try:
-                    uploaded_data = json.loads(raw_json.decode("utf-8"))
-                except UnicodeDecodeError:
-                    uploaded_data = json.loads(raw_json.decode("utf-8-sig"))
-
-                st.session_state["data"] = normalize_data(uploaded_data)
-                save_local_storage_data(st.session_state["data"])
-                if st.session_state["data"]["projects"]:
-                    st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
-                else:
-                    st.session_state["selected_project_id"] = None
-                st.success("JSONを読み込みました。")
-                st.rerun()
-            except Exception:
-                st.error("JSONの読み込みに失敗しました。形式を確認してください。")
-
-    st.download_button(
-        "JSON保存",
-        data=json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
-        file_name="bukken_data.json",
-        mime="application/json",
-        use_container_width=True,
-    )
-
     if data["projects"]:
         st.caption("表示フィルタ")
-        filter_mode = st.radio("表示", ["すべて", "未対応あり", "重要度高あり"])
+        filter_mode = st.radio("表示", ["すべて", "未対応あり", "重要度高あり"], key="filter_mode")
+        save_app_state()
         st.caption("物件選択一覧")
 
         for p in data["projects"]:
@@ -743,6 +775,7 @@ with st.sidebar:
 
             if st.button(label, key=f"select_{p['id']}", use_container_width=True):
                 st.session_state["selected_project_id"] = p["id"]
+                save_app_state()
                 st.rerun()
 
     else:
@@ -853,6 +886,47 @@ with st.sidebar:
                     st.rerun()
 
     st.caption(f"保存先：{get_data_file()}")
+    st.divider()
+
+    # 最下部：読込・保存関連
+    st.header("💾 読込・保存")
+    uploaded_json = st.file_uploader(
+        "JSON読込",
+        type=["json"],
+        accept_multiple_files=False,
+        help="bukken_data.json を選択してください。",
+    )
+    if st.button("JSON読込", use_container_width=True):
+        if uploaded_json is None:
+            st.warning("先にJSONファイルを選択してください。")
+        else:
+            try:
+                raw_json = uploaded_json.getvalue()
+                try:
+                    uploaded_data = json.loads(raw_json.decode("utf-8"))
+                except UnicodeDecodeError:
+                    uploaded_data = json.loads(raw_json.decode("utf-8-sig"))
+
+                st.session_state["data"] = normalize_data(uploaded_data)
+                if st.session_state["data"]["projects"]:
+                    st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
+                else:
+                    st.session_state["selected_project_id"] = None
+                save_data(st.session_state["data"])
+                save_local_storage_data(st.session_state["data"])
+                save_app_state()
+                st.success("JSONを読み込みました。次回起動時も自動で復元されます。")
+                st.rerun()
+            except Exception:
+                st.error("JSONの読み込みに失敗しました。形式を確認してください。")
+
+    st.download_button(
+        "JSON保存",
+        data=json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
+        file_name="bukken_data.json",
+        mime="application/json",
+        use_container_width=True,
+    )
 
 
 if not data["projects"]:
@@ -862,6 +936,7 @@ if not data["projects"]:
 
 if st.session_state["selected_project_id"] is None:
     st.session_state["selected_project_id"] = data["projects"][0]["id"]
+    save_app_state()
 
 
 project = get_project(data, st.session_state["selected_project_id"])
@@ -869,6 +944,7 @@ project = get_project(data, st.session_state["selected_project_id"])
 if project is None:
     project = data["projects"][0]
     st.session_state["selected_project_id"] = project["id"]
+    save_app_state()
 
 
 current_folder_key = f"current_folder_{project['id']}"
