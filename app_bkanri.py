@@ -423,6 +423,63 @@ def card_html(log, bg_color, border_color, due_label):
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
+st.markdown(
+    """
+    <style>
+    html, body, [class*="css"] {
+        font-size: 18px !important;
+    }
+
+    .stApp {
+        background-color: #ffffff !important;
+        color: #111111 !important;
+    }
+
+    .stMarkdown, .stText, .stTextInput, .stTextArea, .stSelectbox, .stDateInput, .stButton, .stDownloadButton {
+        color: #111111 !important;
+    }
+
+    label, p, span, div {
+        color: #111111 !important;
+    }
+
+    input, textarea {
+        font-size: 18px !important;
+        color: #111111 !important;
+        background-color: #ffffff !important;
+    }
+
+    button {
+        font-size: 18px !important;
+        min-height: 44px !important;
+        color: #111111 !important;
+    }
+
+    @media screen and (max-width: 768px) {
+        html, body, [class*="css"] {
+            font-size: 20px !important;
+        }
+
+        .block-container {
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+            padding-top: 1rem !important;
+        }
+
+        input, textarea, button {
+            font-size: 20px !important;
+        }
+
+        .stButton button, .stDownloadButton button {
+            width: 100% !important;
+            min-height: 48px !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 calendar_url = "https://calendar.google.com/"
 
 title_col, button_col = st.columns([6, 1])
@@ -474,7 +531,12 @@ with st.sidebar:
             st.warning("先にJSONファイルを選択してください。")
         else:
             try:
-                uploaded_data = json.loads(uploaded_json.getvalue().decode("utf-8"))
+                raw_json = uploaded_json.getvalue()
+                try:
+                    uploaded_data = json.loads(raw_json.decode("utf-8"))
+                except UnicodeDecodeError:
+                    uploaded_data = json.loads(raw_json.decode("utf-8-sig"))
+
                 st.session_state["data"] = normalize_data(uploaded_data)
                 if st.session_state["data"]["projects"]:
                     st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
