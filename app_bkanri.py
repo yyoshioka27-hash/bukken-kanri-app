@@ -668,6 +668,7 @@ data = st.session_state["data"]
 with st.sidebar:
     join_config = st.session_state.get("join_config")
 
+    # 上部：日常利用の中心（一覧・フィルタ・選択）
     st.header("📌 物件一覧")
 
     uploaded_json = st.file_uploader(
@@ -707,7 +708,9 @@ with st.sidebar:
     )
 
     if data["projects"]:
+        st.caption("表示フィルタ")
         filter_mode = st.radio("表示", ["すべて", "未対応あり", "重要度高あり"])
+        st.caption("物件選択一覧")
 
         for p in data["projects"]:
             open_count = count_open_logs(p)
@@ -730,6 +733,7 @@ with st.sidebar:
 
     st.divider()
 
+    # 中段：日常的によく使う編集系
     st.header("➕ 新規物件登録")
 
     st.write("物件フォルダ")
@@ -777,6 +781,7 @@ with st.sidebar:
 
     st.divider()
 
+    # 下段：JOIN関連を最下部に集約
     st.header("🔗 JOIN設定")
     if join_config:
         st.caption(
@@ -830,7 +835,6 @@ with st.sidebar:
                     st.success("JOIN設定を保存しました。次回起動時も自動復元されます。")
                     st.rerun()
 
-    st.divider()
     st.caption(f"保存先：{get_data_file()}")
 
 
