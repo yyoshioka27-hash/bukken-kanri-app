@@ -432,21 +432,25 @@ def card_html(log, bg_color, border_color, due_label):
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-header_col, calendar_col = st.columns([5, 2])
+header_col, calendar_col = st.columns([4, 3])
 
 with header_col:
     st.title("📁 物件管理アプリ")
 
 with calendar_col:
     st.markdown(
-        '<div style="font-size:0.9rem; margin-bottom:0.2rem;">📅 Googleカレンダー</div>',
+        '<div style="font-size:1rem; margin-bottom:0.4rem;">📅 Googleカレンダー</div>',
         unsafe_allow_html=True,
     )
-    st.components.v1.iframe(
-        "https://calendar.google.com/calendar/embed?height=220&wkst=1&ctz=Asia%2FTokyo&showTitle=0&showNav=0&showDate=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&mode=AGENDA&src=ja.japanese%23holiday%40group.v.calendar.google.com&color=%23039BE5",
-        height=220,
-        scrolling=False,
+    calendar_url = (
+        "https://calendar.google.com/calendar/embed?height=420&wkst=1&ctz=Asia%2FTokyo"
+        "&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0"
+        "&showTz=0&mode=AGENDA&src=ja.japanese%23holiday%40group.v.calendar.google.com"
+        "&color=%23039BE5"
     )
+    st.components.v1.iframe(calendar_url, height=420, scrolling=False)
+    st.caption("カレンダーが表示されない場合は、下のリンクからGoogleカレンダーを直接開いてください。")
+    st.link_button("Googleカレンダーを開く", calendar_url)
 
 data = load_data()
 
