@@ -668,59 +668,6 @@ data = st.session_state["data"]
 with st.sidebar:
     join_config = st.session_state.get("join_config")
 
-    st.header("🔗 JOIN設定")
-    if join_config:
-        st.caption(
-            f"JSON読込先: {join_config['data_dir']} / "
-            f"共有データ: {'ON' if join_config['shared_enabled'] else 'OFF'} / "
-            f"参照先: {join_config['property_source']}"
-        )
-        col_join_1, col_join_2 = st.columns(2)
-        with col_join_1:
-            if st.button("JOIN設定を変更", use_container_width=True):
-                st.session_state["show_join_form"] = True
-        with col_join_2:
-            if st.button("JOIN設定をリセット", use_container_width=True):
-                clear_join_config()
-                st.session_state["data"] = {"projects": []}
-                st.success("JOIN設定をリセットしました。")
-                st.rerun()
-    else:
-        st.session_state["show_join_form"] = True
-
-    if st.session_state.get("show_join_form", False):
-        with st.form("join_settings_form"):
-            join_data_dir = st.text_input(
-                "JSON読込先フォルダ",
-                value=(join_config or {}).get("data_dir", str(get_data_dir())),
-                help="例: C:\\構造設計メモ管理データ",
-            )
-            join_shared_enabled = st.checkbox(
-                "共有データ設定を有効化",
-                value=(join_config or {}).get("shared_enabled", False),
-            )
-            join_property_source = st.selectbox(
-                "物件データ参照先",
-                ["保存済みJSON", "アップロードJSON優先"],
-                index=0 if (join_config or {}).get("property_source", "保存済みJSON") == "保存済みJSON" else 1,
-            )
-            if st.form_submit_button("JOINして保存", use_container_width=True):
-                cfg = normalize_join_config(
-                    {
-                        "data_dir": join_data_dir,
-                        "shared_enabled": join_shared_enabled,
-                        "property_source": join_property_source,
-                    }
-                )
-                if cfg is None:
-                    st.error("JSON読込先フォルダを入力してください。")
-                else:
-                    save_join_config(cfg)
-                    st.session_state["show_join_form"] = False
-                    st.session_state["data"] = load_initial_data()
-                    st.success("JOIN設定を保存しました。次回起動時も自動復元されます。")
-                    st.rerun()
-
     st.header("📌 物件一覧")
 
     uploaded_json = st.file_uploader(
@@ -827,6 +774,61 @@ with st.sidebar:
 
                 st.success("物件を追加しました。")
                 st.rerun()
+
+    st.divider()
+
+    st.header("🔗 JOIN設定")
+    if join_config:
+        st.caption(
+            f"JSON読込先: {join_config['data_dir']} / "
+            f"共有データ: {'ON' if join_config['shared_enabled'] else 'OFF'} / "
+            f"参照先: {join_config['property_source']}"
+        )
+        col_join_1, col_join_2 = st.columns(2)
+        with col_join_1:
+            if st.button("JOIN設定を変更", use_container_width=True):
+                st.session_state["show_join_form"] = True
+        with col_join_2:
+            if st.button("JOIN設定をリセット", use_container_width=True):
+                clear_join_config()
+                st.session_state["data"] = {"projects": []}
+                st.success("JOIN設定をリセットしました。")
+                st.rerun()
+    else:
+        st.session_state["show_join_form"] = True
+
+    if st.session_state.get("show_join_form", False):
+        with st.form("join_settings_form"):
+            join_data_dir = st.text_input(
+                "JSON読込先フォルダ",
+                value=(join_config or {}).get("data_dir", str(get_data_dir())),
+                help="例: C:\\構造設計メモ管理データ",
+            )
+            join_shared_enabled = st.checkbox(
+                "共有データ設定を有効化",
+                value=(join_config or {}).get("shared_enabled", False),
+            )
+            join_property_source = st.selectbox(
+                "物件データ参照先",
+                ["保存済みJSON", "アップロードJSON優先"],
+                index=0 if (join_config or {}).get("property_source", "保存済みJSON") == "保存済みJSON" else 1,
+            )
+            if st.form_submit_button("JOINして保存", use_container_width=True):
+                cfg = normalize_join_config(
+                    {
+                        "data_dir": join_data_dir,
+                        "shared_enabled": join_shared_enabled,
+                        "property_source": join_property_source,
+                    }
+                )
+                if cfg is None:
+                    st.error("JSON読込先フォルダを入力してください。")
+                else:
+                    save_join_config(cfg)
+                    st.session_state["show_join_form"] = False
+                    st.session_state["data"] = load_initial_data()
+                    st.success("JOIN設定を保存しました。次回起動時も自動復元されます。")
+                    st.rerun()
 
     st.divider()
     st.caption(f"保存先：{get_data_file()}")
