@@ -599,6 +599,29 @@ st.markdown(
         color: #111111 !important;
     }
 
+    .stButton button, .stDownloadButton button, button[kind="secondary"] {
+        background-color: #f5f5f5 !important;
+        color: #111111 !important;
+        border: 1px solid #bdbdbd !important;
+    }
+
+    @media screen and (max-width: 1024px) {
+        [data-testid="stSidebar"] {
+            background-color: #f7f7f7 !important;
+            color: #111111 !important;
+        }
+
+        [data-testid="stSidebar"] * {
+            color: #111111 !important;
+        }
+
+        .stButton button, .stDownloadButton button, button[kind="secondary"] {
+            background-color: #f5f5f5 !important;
+            color: #111111 !important;
+            border: 1px solid #9e9e9e !important;
+        }
+    }
+
     @media screen and (max-width: 768px) {
         html, body, [class*="css"] {
             font-size: 20px !important;
@@ -626,14 +649,8 @@ st.markdown(
 
 calendar_url = "https://calendar.google.com/"
 
-title_col, button_col = st.columns([6, 1])
-
-with title_col:
-    st.title("📁 物件管理アプリ")
-
-with button_col:
-    st.write("")
-    st.link_button("📅 カレンダー", calendar_url, use_container_width=True)
+st.title("📁 物件管理アプリ")
+st.link_button("📅 カレンダー", calendar_url, use_container_width=False)
 
 
 if "selected_project_id" not in st.session_state:
