@@ -6,224 +6,26 @@ import os
 import shutil
 import uuid
 import html
+import urllib.parse
+import tkinter as tk
+from tkinter import filedialog
 from datetime import datetime, date
 from pathlib import Path
 
-APP_TITLE = "物件管理アプリ 第三段階"
-DATA_DIR = Path(__file__).resolve().parent / "data"
+APP_TITLE = "物件管理アプリ"
+DATA_DIR = Path(r"C:\構造設計メモ管理データ")
 DATA_FILE = DATA_DIR / "bukken_data.json"
 BACKUP_DIR = DATA_DIR / "backup"
-EXPORT_PDF_DIR = DATA_DIR / "export_pdf"
 EXPORT_TEXT_DIR = DATA_DIR / "export_text"
 
-STATUSES = ["未対応", "対応中", "対応済", "連絡待ち", "保留"]
-PRIORITIES = ["低", "中", "高", "構造設計"]
-
-
-PRIORITY_COLORS = {
-    "低": "#8f8f8f",
-    "中": "#2f80ed",
-    "高": "#d32f2f",
-    "構造設計": "#6a1b9a",
-}
+STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
+PRIORITIES = ["低", "中", "高"]
 
 
 def init_dirs():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    EXPORT_PDF_DIR.mkdir(parents=True, exist_ok=True)
     EXPORT_TEXT_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def sanitize_windows_filename(name):
-    invalid_chars = '<>:"/\\|?*'
-    safe = "".join("_" if c in invalid_chars else c for c in str(name))
-    safe = safe.strip().rstrip(".")
-    return safe or "project"
-
-
-def build_project_history_pdf(project, include_structural_note=False):
-    try:
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import mm
-        from reportlab.pdfgen import canvas
-    except ImportError:
-        return False, "reportlab_not_installed", None
-
-    font_candidates = [
-        r"C:\Windows\Fonts\meiryo.ttc",
-        r"C:\Windows\Fonts\msgothic.ttc",
-        r"C:\Windows\Fonts\YuGothM.ttc",
-    ]
-
-    font_name = None
-    for idx, font_path in enumerate(font_candidates):
-        if Path(font_path).exists():
-            font_name = f"jp_font_{idx}"
-            pdfmetrics.registerFont(TTFont(font_name, font_path))
-            break
-
-    if font_name is None:
-        return False, "font_not_found", None
-
-    ts = datetime.now()
-    file_name = (
-        f"{sanitize_windows_filename(project.get('name', '物件'))}"
-        f"_やり取り履歴_{ts.strftime('%Y%m%d_%H%M%S')}.pdf"
-    )
-    out_path = EXPORT_PDF_DIR / file_name
-
-    c = canvas.Canvas(str(out_path), pagesize=A4)
-    width, height = A4
-    y = height - 20 * mm
-    line_h = 7 * mm
-
-    def draw_line(text, size=11):
-        nonlocal y
-        if y < 20 * mm:
-            c.showPage()
-            c.setFont(font_name, size)
-            y = height - 20 * mm
-        c.setFont(font_name, size)
-        c.drawString(15 * mm, y, str(text))
-        y -= line_h
-
-    draw_line("やり取り履歴", 14)
-    y -= 2 * mm
-    draw_line(f"物件名: {project.get('name', '')}")
-    draw_line(f"相手先・担当: {project.get('client', '')}")
-    draw_line(f"PDF出力日時: {ts.strftime('%Y-%m-%d %H:%M:%S')}")
-    y -= 2 * mm
-    draw_line("【やり取り履歴一覧】")
-
-    logs = sorted(
-        project.get("logs", []),
-        key=lambda x: parse_date_safe(x.get("date", "")) or date.min,
-    )
-    if not logs:
-        draw_line("履歴はありません。")
-    else:
-        for i, log in enumerate(logs, start=1):
-            draw_line(f"{i}. 日付: {log.get('date', '')}")
-            draw_line(f"   状態: {log.get('status', '')}")
-            draw_line(f"   期限: {log.get('due_date', '')}")
-            draw_line(f"   重要度: {log.get('priority', '')}")
-            draw_line(f"   相手先: {log.get('person', '')}")
-            for content_line in str(log.get("content", "")).splitlines() or [""]:
-                draw_line(f"   内容: {content_line}")
-            draw_line(f"   添付ファイルパス: {log.get('attachment_path', '')}")
-            y -= 1 * mm
-
-    if include_structural_note:
-        y -= 2 * mm
-        draw_line("【構造設計メモ】")
-        structural_note_text = str(project.get("structural_note", "")).strip()
-        if not structural_note_text:
-            draw_line("構造設計メモはありません。")
-        else:
-            updated_at = str(project.get("structural_note_updated_at", "")).strip()
-            if updated_at:
-                draw_line(f"最終更新: {updated_at}")
-            for memo_line in structural_note_text.splitlines() or [""]:
-                draw_line(memo_line)
-
-    c.save()
-    return True, str(out_path), out_path
-
-
-
-
-
-
-def export_project_history_pdf(project):
-    ok, result, out_path = build_project_history_pdf(project)
-    if ok:
-        st.session_state["latest_export_pdf_path"] = str(out_path)
-        st.success(f"履歴PDFを出力しました：{result}")
-        open_path(str(out_path))
-    elif result == "reportlab_not_installed":
-        st.warning("PDF出力には reportlab が必要です。`pip install reportlab` を実行してください。")
-    elif result == "font_not_found":
-        st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
-    else:
-        st.error("履歴PDFの出力に失敗しました。")
-
-
-def export_project_history_and_structural_note_pdf(project):
-    ok, result, out_path = build_project_history_pdf(project, include_structural_note=True)
-    if ok:
-        st.session_state["latest_export_pdf_path"] = str(out_path)
-        st.success(f"履歴＋構造設計メモPDFを出力しました：{result}")
-        open_path(str(out_path))
-    elif result == "reportlab_not_installed":
-        st.warning("PDF出力には reportlab が必要です。`pip install reportlab` を実行してください。")
-    elif result == "font_not_found":
-        st.warning("日本語フォントが見つかりませんでした。Windowsフォントの配置を確認してください。")
-    else:
-        st.error("履歴＋構造設計メモPDFの出力に失敗しました。")
-
-
-
-def build_structural_note_a4_text(project):
-    ts = datetime.now()
-    file_name = (
-        f"{sanitize_windows_filename(project.get('name', '物件'))}"
-        f"_構造メモ_A4_{ts.strftime('%Y%m%d_%H%M%S')}.txt"
-    )
-    out_path = EXPORT_TEXT_DIR / file_name
-
-    memo_text = str(project.get("structural_note", "")).strip()
-    updated_at = str(project.get("structural_note_updated_at", "")).strip()
-
-    lines = [
-        "=" * 76,
-        "構造設計メモ（A4テキスト形式）",
-        "=" * 76,
-        f"物件名: {project.get('name', '')}",
-        f"相手先・担当: {project.get('client', '')}",
-        f"作成日時: {ts.strftime('%Y-%m-%d %H:%M:%S')}",
-        f"最終更新: {updated_at or '-'}",
-        "-" * 76,
-        "【メモ】",
-    ]
-
-    if memo_text:
-        lines.extend(memo_text.splitlines())
-    else:
-        lines.append("（メモ未入力）")
-
-    lines.extend(["-" * 76, "A4印刷時は余白を標準または狭いに設定してください。", ""])
-
-    out_path.write_text("\n".join(lines), encoding="utf-8")
-    return out_path
-
-
-def export_structural_note_a4_text(project):
-    out_path = build_structural_note_a4_text(project)
-    st.session_state["latest_export_text_path"] = str(out_path)
-    st.success(f"構造メモ（A4テキスト）を出力しました：{out_path}")
-    open_path(str(out_path))
-
-def export_schedule_pdf(project):
-    src_text = str(project.get("schedule_pdf_path", "")).strip().strip('"').strip("'")
-    if not src_text:
-        return False, "path_not_set", None
-
-    src = Path(src_text)
-    if not src.exists() or src.suffix.lower() != ".pdf":
-        return False, "source_not_found", None
-
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_name = f"{sanitize_windows_filename(project.get('name', '物件'))}_工程表_{ts}.pdf"
-    out_path = EXPORT_PDF_DIR / out_name
-    shutil.copy2(src, out_path)
-    return True, str(out_path), out_path
-
-
-def save_latest_export_path(path_obj):
-    st.session_state["latest_export_pdf_path"] = str(path_obj)
 
 
 def load_data():
@@ -233,18 +35,9 @@ def load_data():
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-
-        if isinstance(data, dict):
-            projects = data.get("projects", [])
-            if not isinstance(projects, list):
-                projects = []
-            data["projects"] = projects
-            return data
-
-        if isinstance(data, list):
-            return {"projects": data}
-
-        return {"projects": []}
+        if "projects" not in data:
+            data["projects"] = []
+        return data
     except Exception:
         return {"projects": []}
 
@@ -279,19 +72,111 @@ def open_path(path_text):
             st.error(f"開けませんでした: {e}")
 
 
+def sanitize_windows_filename(name):
+    invalid_chars = '<>:"/\\|?*'
+    safe = "".join("_" if c in invalid_chars else c for c in str(name))
+    safe = safe.strip().strip(".")
+    return safe or "project"
+
+
+def build_structural_memo_text(project):
+    """選択物件のやり取り履歴から、A4印刷しやすい構造設計メモtxt本文を作成する。"""
+    project_name = project.get("name", "")
+    client = project.get("client", "")
+    created_at = project.get("created_at", "")
+    folder_path = project.get("folder_path", "")
+    schedule_pdf_path = project.get("schedule_pdf_path", "")
+    logs = sorted(project.get("logs", []), key=lambda x: x.get("date", ""))
+
+    lines = []
+    lines.append("構造設計メモ")
+    lines.append("=" * 60)
+    lines.append(f"物件名：{project_name}")
+    lines.append(f"相手先・担当：{client}")
+    lines.append(f"登録日：{created_at}")
+    lines.append(f"出力日：{datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    lines.append("")
+    lines.append("【パス情報】")
+    lines.append(f"物件フォルダ：{folder_path}")
+    lines.append(f"工程表PDF：{schedule_pdf_path}")
+    lines.append("")
+    lines.append("【集計】")
+    lines.append(f"未対応・対応中：{count_open_logs(project)} 件")
+    lines.append(f"重要度高：{count_high_logs(project)} 件")
+    lines.append("")
+    lines.append("【やり取り履歴】")
+
+    if not logs:
+        lines.append("表示するやり取りはありません。")
+    else:
+        for i, log in enumerate(logs, start=1):
+            lines.append("-" * 60)
+            lines.append(f"No.{i}")
+            lines.append(f"日付：{log.get('date', '')}")
+            lines.append(f"状態：{log.get('status', '')}")
+            lines.append(f"期限：{log.get('due_date', '')}")
+            lines.append(f"相手先：{log.get('person', '')}")
+            lines.append(f"重要度：{log.get('priority', '')}")
+            attachment_path = log.get("attachment_path", "")
+            if attachment_path:
+                lines.append(f"添付：{attachment_path}")
+            lines.append("内容：")
+            lines.append(str(log.get("content", "")))
+
+    lines.append("=" * 60)
+    lines.append("# END")
+    return "\n".join(lines)
+
+
+def save_structural_memo_text(project):
+    """構造設計メモtxtを保存し、保存パスと本文を返す。"""
+    init_dirs()
+    memo_text = build_structural_memo_text(project)
+    today = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = sanitize_windows_filename(project.get("name", "project"))
+    file_path = EXPORT_TEXT_DIR / f"{safe_name}_構造設計メモ_{today}.txt"
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(memo_text)
+
+    return file_path, memo_text
+
+
 def browse_folder():
-    st.info("クラウド環境ではフォルダ参照ダイアログは利用できません。パスを直接入力してください。")
-    return ""
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    folder = filedialog.askdirectory()
+    root.destroy()
+    return folder
 
 
 def browse_pdf():
-    st.info("クラウド環境ではPDF参照ダイアログは利用できません。パスを直接入力してください。")
-    return ""
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    file_path = filedialog.askopenfilename(
+        filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+    )
+    root.destroy()
+    return file_path
 
 
 def browse_any_file():
-    st.info("クラウド環境ではファイル参照ダイアログは利用できません。パスを直接入力してください。")
-    return ""
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    file_path = filedialog.askopenfilename(
+        filetypes=[
+            ("All files", "*.*"),
+            ("PDF files", "*.pdf"),
+            ("Excel files", "*.xlsx;*.xls"),
+            ("Word files", "*.docx"),
+            ("Text files", "*.txt"),
+        ]
+    )
+    root.destroy()
+    return file_path
 
 
 def get_project(data, project_id):
@@ -329,6 +214,57 @@ def parse_date_safe(text):
         return None
 
 
+def build_google_calendar_url(project, log):
+    """やり取り履歴の内容からGoogleカレンダー登録用URLを作成する。
+
+    無料・APIキー不要の方式。
+    ブラウザでGoogleカレンダーの予定作成画面を開く。
+    """
+    project_name = project.get("name", "")
+    person = log.get("person", "")
+    due_text = log.get("due_date", "") or log.get("date", "")
+    target_date = parse_date_safe(due_text) or date.today()
+    next_day = date.fromordinal(target_date.toordinal() + 1)
+
+    title = f"{project_name}｜{person}｜{log.get('status', '')}".strip("｜")
+    if not title:
+        title = "物件対応予定"
+
+    details_lines = [
+        f"物件名：{project_name}",
+        f"相手先・担当：{project.get('client', '')}",
+        f"やり取り相手：{person}",
+        f"状態：{log.get('status', '')}",
+        f"重要度：{log.get('priority', '')}",
+        f"期限：{log.get('due_date', '')}",
+        "",
+        "【内容】",
+        str(log.get("content", "")),
+    ]
+
+    attachment_path = log.get("attachment_path", "")
+    if attachment_path:
+        details_lines.extend(["", f"添付：{attachment_path}"])
+
+    folder_path = project.get("folder_path", "")
+    if folder_path:
+        details_lines.extend(["", f"物件フォルダ：{folder_path}"])
+
+    details = "\n".join(details_lines)
+
+    # 終日予定として登録する。Googleカレンダーの終日予定は終了日を翌日にする。
+    dates = f"{target_date.strftime('%Y%m%d')}/{next_day.strftime('%Y%m%d')}"
+
+    params = {
+        "action": "TEMPLATE",
+        "text": title,
+        "details": details,
+        "dates": dates,
+    }
+
+    return "https://calendar.google.com/calendar/render?" + urllib.parse.urlencode(params)
+
+
 def due_style(log):
     due = parse_date_safe(log.get("due_date", ""))
     today = date.today()
@@ -347,16 +283,7 @@ def due_style(log):
         return "#eaf3ff", "#4d94ff", "3日以内"
 
     if priority == "高":
-        return "#ffecec", "#e53935", "重要度高"
-
-    if priority == "構造設計":
-        return "#f3e8ff", "#8e44ad", "構造設計"
-
-    if priority == "中":
-        return "#eaf3ff", "#4d94ff", ""
-
-    if priority == "低":
-        return "#f7f7f7", "#bdbdbd", ""
+        return "#eaf3ff", "#4d94ff", "重要度高"
 
     return "#ffffff", "#dddddd", ""
 
@@ -463,18 +390,17 @@ def read_uploaded_text(uploaded_file):
 
 def card_html(log, bg_color, border_color, due_label):
     text_date = html.escape(str(log.get("date", "")))
+    text_project = html.escape(str(log.get("project_name", "")))
     text_status = html.escape(str(log.get("status", "")))
     text_due = html.escape(str(log.get("due_date", "")))
     text_person = html.escape(str(log.get("person", "")))
-    raw_priority = str(log.get("priority", ""))
-    text_priority = html.escape(raw_priority)
-    priority_color = PRIORITY_COLORS.get(raw_priority, "#666666")
+    text_priority = html.escape(str(log.get("priority", "")))
     text_content = html.escape(str(log.get("content", ""))).replace("\n", "<br>")
     text_due_label = html.escape(str(due_label))
 
     if text_due_label:
         label_html = (
-            f'<span class="due-chip" style="display:inline-block; background:{border_color}; '
+            f'<span style="display:inline-block; background:{border_color}; '
             f'color:white; padding:2px 8px; border-radius:8px; '
             f'font-size:12px; margin-left:8px;">{text_due_label}</span>'
         )
@@ -482,7 +408,7 @@ def card_html(log, bg_color, border_color, due_label):
         label_html = ""
 
     return (
-        f'<div class="today-task-card" style="'
+        f'<div style="'
         f'background-color:{bg_color}; '
         f'border:1px solid {border_color}; '
         f'border-left:8px solid {border_color}; '
@@ -492,92 +418,20 @@ def card_html(log, bg_color, border_color, due_label):
         f'line-height:1.7; '
         f'width:100%; '
         f'box-sizing:border-box;">'
-        f'<b>{text_date}</b>　'
+        f'<b>{text_project}</b> ｜ <b>{text_date}</b>　'
         f'状態：{text_status}　'
         f'期限：{text_due} '
         f'{label_html}　'
         f'相手先：{text_person}　'
-        f'重要度：<span class="priority-chip" style="display:inline-block; color:white; background:{priority_color}; padding:2px 8px; border-radius:8px; font-size:12px;">{text_priority}</span>'
+        f'重要度：<b>{text_priority}</b>'
         f'<br>'
         f'{text_content}'
         f'</div>'
     )
 
-def ensure_project_extra_fields(project):
-    if "structural_note" not in project:
-        project["structural_note"] = ""
 
-    if "structural_note_updated_at" not in project:
-        project["structural_note_updated_at"] = ""
 st.set_page_config(page_title=APP_TITLE, layout="wide")
-st.title("📁 物件管理アプリ 第三段階")
-st.markdown(
-    """
-    <style>
-    .today-task-card, .today-task-card * {
-      color: #1f2937 !important;
-    }
-    .today-task-card .due-chip, .today-task-card .priority-chip {
-      color: #ffffff !important;
-    }
-    .stButton > button, .stDownloadButton > button {
-      white-space: normal !important;
-      word-break: keep-all;
-      overflow-wrap: anywhere;
-      min-height: 46px;
-      line-height: 1.35;
-      padding-top: 0.45rem;
-      padding-bottom: 0.45rem;
-    }
-    [data-testid="stHorizontalBlock"] {
-      gap: 0.65rem;
-      flex-wrap: wrap;
-    }
-    [data-testid="stHorizontalBlock"] > div {
-      min-width: 180px;
-    }
-    .block-container {
-      max-width: 100%;
-    }
-    @media (max-width: 1200px) {
-      section[data-testid="stSidebar"] {
-        min-width: 250px !important;
-        max-width: 250px !important;
-      }
-      .main .block-container {
-        padding-left: 0.8rem;
-        padding-right: 0.8rem;
-      }
-      [data-testid="stHorizontalBlock"] {
-        flex-direction: column;
-      }
-      [data-testid="stHorizontalBlock"] > div {
-        width: 100% !important;
-        min-width: 0 !important;
-      }
-      .stButton > button, .stDownloadButton > button {
-        width: 100%;
-        font-size: 0.98rem;
-      }
-    }
-    @media (max-width: 768px) {
-      .stButton > button, .stDownloadButton > button {
-        width: 100%;
-        min-height: 44px;
-        font-size: 0.95rem;
-      }
-      .stTextInput input, .stTextArea textarea, .stDateInput input, .stSelectbox div[data-baseweb="select"] {
-        font-size: 16px;
-      }
-      .block-container {
-        padding-left: 0.8rem;
-        padding-right: 0.8rem;
-      }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.title("📁 物件管理アプリ")
 
 data = load_data()
 
@@ -596,6 +450,8 @@ if "new_attachment_path" not in st.session_state:
 if "editing_log_id" not in st.session_state:
     st.session_state["editing_log_id"] = None
 
+if "show_structural_memo_editor" not in st.session_state:
+    st.session_state["show_structural_memo_editor"] = False
 
 
 with st.sidebar:
@@ -712,13 +568,7 @@ if project is None:
 
 current_folder_key = f"current_folder_{project['id']}"
 current_pdf_key = f"current_pdf_{project['id']}"
-ensure_project_extra_fields(project)
 
-structural_note_key = f"structural_note_{project['id']}"
-show_structural_note_key = f"show_structural_note_{project['id']}"
-
-if structural_note_key not in st.session_state:
-    st.session_state[structural_note_key] = project.get("structural_note", "")
 if current_folder_key not in st.session_state:
     st.session_state[current_folder_key] = project.get("folder_path", "")
 
@@ -739,7 +589,7 @@ else:
 
 st.divider()
 
-col1, col2, col3, col4, col5, col6 = st.columns([4, 1.3, 1.3, 1.6, 1.4, 1.6])
+col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
 with col1:
     st.subheader(f"🏢 {project['name']}")
@@ -750,138 +600,92 @@ with col1:
     )
 
 with col2:
-    if st.button("📄 工程表PDFを開く", use_container_width=True):
+    st.write("")
+    st.write("")
+    if st.button("📄 工程表PDFを開く", key=f"open_schedule_pdf_{project['id']}"):
         open_path(project.get("schedule_pdf_path", ""))
 
 with col3:
-    if st.button("📂 物件フォルダを開く", use_container_width=True):
+    st.write("")
+    st.write("")
+    if st.button("📂 物件フォルダを開く", key=f"open_project_folder_{project['id']}"):
         open_path(project.get("folder_path", ""))
 
 with col4:
-    memo_text_for_download = str(st.session_state.get(structural_note_key, project.get("structural_note", "")))
+    st.write("")
+    st.write("")
+    memo_text_for_download = build_structural_memo_text(project)
+    safe_project_name = sanitize_windows_filename(project.get("name", "project"))
     st.download_button(
-        "📄 構造設計メモをtxt出力",
-        data=memo_text_for_download,
-        file_name="構造設計メモ.txt",
+        "📄 履歴txt出力",
+        data=memo_text_for_download.encode("utf-8-sig"),
+        file_name=f"{safe_project_name}_やり取り履歴.txt",
         mime="text/plain",
+        key=f"download_history_text_{project['id']}",
         use_container_width=True,
-        key=f"structural_memo_txt_download_{project['id']}",
     )
 
-with col5:
-    memo_btn_label = "🗒 構造設計メモを閉じる" if st.session_state.get(show_structural_note_key, False) else "🗒 構造設計メモを開く"
-    if st.button(memo_btn_label, use_container_width=True):
-        st.session_state[show_structural_note_key] = not st.session_state.get(show_structural_note_key, False)
-        st.rerun()
-
-with col5:
-    latest_structural_memo_path = st.session_state.get("latest_export_text_path", "")
-    if latest_structural_memo_path and Path(latest_structural_memo_path).exists():
-        memo_name = Path(latest_structural_memo_path).name
-        memo_bytes = Path(latest_structural_memo_path).read_bytes()
-        st.download_button(
-            "📥 構造設計メモをダウンロード",
-            data=memo_bytes,
-            file_name=memo_name,
-            mime="text/plain",
-            use_container_width=True,
-            key=f"download_structural_memo_{project['id']}",
-        )
-
-with col6:
-    st.caption("PDF書き出し")
-    pdf_export_type = st.radio(
-        "出力対象",
-        ["工程表PDF", "やり取り履歴PDF", "やり取り履歴＋構造設計メモPDF"],
-        key=f"pdf_export_type_{project['id']}",
-        horizontal=False,
-        label_visibility="collapsed",
-    )
-    if st.button("📤 PDFを書き出す", use_container_width=True):
-        if pdf_export_type == "工程表PDF":
-            ok, result, out_path = export_schedule_pdf(project)
-            if ok:
-                save_latest_export_path(out_path)
-                st.success(f"工程表PDFを出力しました：{result}")
-                open_path(str(out_path))
-            elif result == "path_not_set":
-                st.warning("工程表PDFのパスが未設定です。下部の『現在の物件のパス設定』から登録してください。")
-            else:
-                st.error("工程表PDFの出力に失敗しました。パスとファイルを確認してください。")
-        elif pdf_export_type == "やり取り履歴PDF":
-            export_project_history_pdf(project)
-        else:
-            export_project_history_and_structural_note_pdf(project)
+    if st.button("📝 構造設計メモ", key=f"open_structural_memo_{project['id']}", use_container_width=True):
+        st.session_state["show_structural_memo_editor"] = not st.session_state["show_structural_memo_editor"]
 
 
-if "latest_export_pdf_path" not in st.session_state:
-    st.session_state["latest_export_pdf_path"] = ""
-if "latest_export_text_path" not in st.session_state:
-    st.session_state["latest_export_text_path"] = ""
+if st.session_state["show_structural_memo_editor"]:
+    st.markdown("### 📝 構造設計メモ")
+    st.caption("A4印刷向けのメモ欄です。ここに構造設計上の確認事項、計算メモ、図面修正方針などを自由に記入できます。")
 
-latest_pdf_path = st.session_state.get("latest_export_pdf_path", "")
-if latest_pdf_path and Path(latest_pdf_path).exists():
-    with open(latest_pdf_path, "rb") as f:
-        st.download_button(
-            "📥 直近の履歴PDFをダウンロード",
-            data=f,
-            file_name=Path(latest_pdf_path).name,
-            mime="application/pdf",
-            use_container_width=True,
-        )
+    memo_key = f"structural_memo_text_{project['id']}"
+    if memo_key not in st.session_state:
+        st.session_state[memo_key] = project.get("structural_memo", "")
 
-latest_text_path = st.session_state.get("latest_export_text_path", "")
-if latest_text_path and Path(latest_text_path).exists():
-    with open(latest_text_path, "rb") as f:
-        st.download_button(
-            "📥 直近の構造メモテキストをダウンロード",
-            data=f,
-            file_name=Path(latest_text_path).name,
-            mime="text/plain",
-            use_container_width=True,
-        )
-
-
-if st.session_state.get(show_structural_note_key, False):
-    st.divider()
-    st.subheader("🏗 構造設計作業メモ")
-
-    st.caption(
-        "物件ごとの構造設計専用メモです。作業日、検討内容、計算方針、確認事項などを自由に記入できます。"
+    structural_memo_text = st.text_area(
+        "構造設計メモ本文",
+        value=st.session_state[memo_key],
+        height=520,
+        key=memo_key,
+        placeholder="""例：
+【構造設計メモ】
+・架構方針
+・荷重条件
+・基礎、杭、地盤条件
+・意匠、設備との調整事項
+・次回確認事項
+""",
     )
 
-    st.session_state[structural_note_key] = st.text_area(
-        "構造設計メモ",
-        value=st.session_state[structural_note_key],
-        height=720,
-        placeholder=(
-            "例：\n"
-            "2026/05/14\n"
-            "・基礎梁、杭の検討\n"
-            "・地盤条件確認\n"
-            "・設備開口位置の影響確認\n"
-            "・次回：杭反力整理、基礎伏図確認\n"
-        ),
-    )
-
-    memo_col1, memo_col2 = st.columns([1, 4])
+    memo_col1, memo_col2, memo_col3 = st.columns([1, 1, 3])
 
     with memo_col1:
-        if st.button("💾 構造設計メモを保存", type="primary"):
-            project["structural_note"] = st.session_state[structural_note_key]
-            project["structural_note_updated_at"] = datetime.now().strftime(
-                "%Y-%m-%d %H:%M"
-            )
+        if st.button("💾 メモを保存", key=f"save_structural_memo_body_{project['id']}"):
+            project["structural_memo"] = structural_memo_text
+            project["structural_memo_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
             save_data(data)
             st.success("構造設計メモを保存しました。")
             st.rerun()
 
     with memo_col2:
-        if project.get("structural_note_updated_at"):
-            st.caption(f"最終更新：{project.get('structural_note_updated_at')}")
+        structural_memo_a4_text = f"""構造設計メモ
+============================================================
+物件名：{project.get('name', '')}
+相手先・担当：{project.get('client', '')}
+更新日：{datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+{structural_memo_text}
+
+# END
+"""
+        st.download_button(
+            "📄 メモtxt出力",
+            data=structural_memo_a4_text.encode("utf-8-sig"),
+            file_name=f"{safe_project_name}_構造設計メモ.txt",
+            mime="text/plain",
+            key=f"download_structural_memo_body_{project['id']}",
+        )
+
+    st.divider()
+
 st.divider()
+
 st.subheader("📋 選択物件のやり取り履歴")
-st.button("📄 履歴PDF出力", key="history_pdf_main_debug")
 
 show_only_open = st.checkbox("未対応・対応中だけ表示")
 
@@ -988,7 +792,7 @@ else:
                     open_path(edit_attach)
 
         else:
-            c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 5])
+            c1, c2, c3, c4, c5, c6 = st.columns([1, 1, 1, 1, 1, 4])
 
             with c1:
                 if st.button("✏編集", key=f"edit_{log['id']}"):
@@ -1014,6 +818,14 @@ else:
                 if attach_path:
                     if st.button("📎添付", key=f"open_attach_{log['id']}"):
                         open_path(attach_path)
+
+            with c5:
+                calendar_url = build_google_calendar_url(project, log)
+                st.link_button(
+                    "📅予定登録",
+                    calendar_url,
+                    use_container_width=True,
+                )
 
         st.divider()
 
@@ -1173,6 +985,5 @@ with st.expander("🔗 現在の物件のパス設定"):
         if st.button("📄 このPDFを開く"):
             open_path(st.session_state[current_pdf_key])
 
-st.caption("※クラウド版では、サーバー再起動時に一時保存データが消える可能性があります。本格運用時はGoogleスプレッドシートまたは外部DB保存への移行を推奨します。")
 
 # END
