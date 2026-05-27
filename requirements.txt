@@ -4,3 +4,4 @@ reportlab
 pypdf
 
 streamlit-local-storage
+requests
