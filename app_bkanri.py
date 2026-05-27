@@ -431,7 +431,22 @@ def card_html(log, bg_color, border_color, due_label):
 
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
-st.title("📁 物件管理アプリ")
+
+header_col, calendar_col = st.columns([5, 2])
+
+with header_col:
+    st.title("📁 物件管理アプリ")
+
+with calendar_col:
+    st.markdown(
+        '<div style="font-size:0.9rem; margin-bottom:0.2rem;">📅 Googleカレンダー</div>',
+        unsafe_allow_html=True,
+    )
+    st.components.v1.iframe(
+        "https://calendar.google.com/calendar/embed?height=220&wkst=1&ctz=Asia%2FTokyo&showTitle=0&showNav=0&showDate=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&mode=AGENDA&src=ja.japanese%23holiday%40group.v.calendar.google.com&color=%23039BE5",
+        height=220,
+        scrolling=False,
+    )
 
 data = load_data()
 
