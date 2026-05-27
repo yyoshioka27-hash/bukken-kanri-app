@@ -7,6 +7,8 @@ import shutil
 import uuid
 import html
 import urllib.parse
+import base64
+import requests
 from datetime import datetime, date
 from pathlib import Path
 
@@ -19,6 +21,7 @@ APP_TITLE = "物件管理アプリ"
 DEFAULT_DATA_DIR = Path(r"C:\構造設計メモ管理データ")
 LOCAL_DATA_DIR = Path(__file__).resolve().parent / "data"
 DATA_FILE_NAME = "bukken_data.json"
+GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高"]
@@ -173,11 +176,7 @@ def load_initial_data():
     if app_state is not None:
         st.session_state["selected_project_id"] = app_state.get("selected_project_id")
         st.session_state["filter_mode"] = app_state.get("filter_mode", "すべて")
-        return app_state.get("data", {"projects": []})
 
-    local_data = get_local_storage_data()
-    if local_data is not None:
-        return local_data
     return load_data()
 
 
@@ -216,6 +215,12 @@ def normalize_data(data):
 
 def load_data():
     init_dirs()
+    github_data, github_error = load_data_from_github()
+    if github_data is not None:
+        return github_data
+    if github_error:
+        st.error(f"GitHubからのデータ読み込みに失敗したためローカル保存を使用します。原因: {github_error}")
+
     data_file = get_data_file()
     if not data_file.exists():
         return {"projects": []}
@@ -230,6 +235,10 @@ def load_data():
 def save_data(data):
     init_dirs()
     data = normalize_data(data)
+    github_error = save_data_to_github(data)
+    if github_error:
+        st.error(f"GitHubへの保存に失敗したためローカル保存のみ実行しました。原因: {github_error}")
+
     data_file = get_data_file()
     backup_dir = get_backup_dir()
     if data_file.exists():
@@ -237,6 +246,79 @@ def save_data(data):
         shutil.copy2(data_file, backup_dir / f"bukken_data_{ts}.json")
     with open(data_file, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _github_headers(token):
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def _github_file_api_url(repo, path):
+    return f"https://api.github.com/repos/{repo}/contents/{path}"
+
+
+def load_data_from_github():
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo = st.secrets.get("GITHUB_REPO")
+    if not token or not repo:
+        return None, "Streamlit secrets に GITHUB_TOKEN / GITHUB_REPO が未設定です。"
+
+    url = _github_file_api_url(repo, GITHUB_DATA_PATH)
+    try:
+        response = requests.get(url, headers=_github_headers(token), timeout=20)
+        if response.status_code == 404:
+            empty_data = {"projects": []}
+            create_error = save_data_to_github(empty_data)
+            if create_error:
+                return None, f"GitHubファイルが未作成で、自動作成にも失敗しました: {create_error}"
+            return empty_data, None
+        response.raise_for_status()
+        payload = response.json()
+        encoded = payload.get("content", "")
+        if not encoded:
+            return {"projects": []}, None
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        return normalize_data(json.loads(decoded)), None
+    except requests.RequestException as e:
+        return None, f"通信エラー: {e}"
+    except Exception as e:
+        return None, f"解析エラー: {e}"
+
+
+def save_data_to_github(data):
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo = st.secrets.get("GITHUB_REPO")
+    if not token or not repo:
+        return "Streamlit secrets に GITHUB_TOKEN / GITHUB_REPO が未設定です。"
+
+    url = _github_file_api_url(repo, GITHUB_DATA_PATH)
+    sha = None
+    try:
+        current = requests.get(url, headers=_github_headers(token), timeout=20)
+        if current.status_code == 200:
+            sha = current.json().get("sha")
+        elif current.status_code != 404:
+            current.raise_for_status()
+
+        body = {
+            "message": f"Update {GITHUB_DATA_PATH}",
+            "content": base64.b64encode(
+                json.dumps(normalize_data(data), ensure_ascii=False, indent=2).encode("utf-8")
+            ).decode("utf-8"),
+        }
+        if sha:
+            body["sha"] = sha
+
+        put_response = requests.put(url, headers=_github_headers(token), json=body, timeout=20)
+        put_response.raise_for_status()
+        return None
+    except requests.RequestException as e:
+        return f"通信エラー: {e}"
+    except Exception as e:
+        return f"保存処理エラー: {e}"
 
 
 def open_path(path_text):
