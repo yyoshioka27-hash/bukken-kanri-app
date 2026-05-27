@@ -747,32 +747,93 @@ st.markdown(
         color: #dddddd !important;
     }
 
-    /* iPad/Safari の selectbox 文字色修正 */
+    /* =========================
+       iPad Safari フォーム強制ライト化
+       ========================= */
+
+    /* input */
+    input,
+    textarea,
+    select {
+        background-color: #ffffff !important;
+        color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
+    }
+
+    /* Streamlit text input */
+    [data-baseweb="input"] input {
+        background-color: #ffffff !important;
+        color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
+    }
+
+    /* selectbox */
     div[data-baseweb="select"] > div {
         background-color: #ffffff !important;
         color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
     }
 
     div[data-baseweb="select"] span {
         color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
     }
 
-    div[data-baseweb="select"] input {
+    /* date input */
+    input[type="date"] {
+        background-color: #ffffff !important;
         color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
     }
 
-    /* ドロップダウン一覧 */
+    /* calendar popup */
+    div[role="dialog"],
+    div[role="listbox"],
     ul[role="listbox"] {
         background-color: #ffffff !important;
-    }
-
-    ul[role="listbox"] li {
         color: #111111 !important;
-        background-color: #ffffff !important;
     }
 
-    ul[role="listbox"] li:hover {
+    /* dropdown item */
+    li[role="option"],
+    div[role="option"] {
+        background-color: #ffffff !important;
+        color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
+    }
+
+    /* hover */
+    li[role="option"]:hover,
+    div[role="option"]:hover {
         background-color: #e6f0ff !important;
+        color: #111111 !important;
+    }
+
+    /* selected */
+    [aria-selected="true"] {
+        background-color: #dbeafe !important;
+        color: #111111 !important;
+    }
+
+    /* iOS Safari auto dark mode 防止 */
+    html {
+        color-scheme: light !important;
+    }
+
+    /* placeholder */
+    ::placeholder {
+        color: #666666 !important;
+    }
+
+    /* button */
+    button {
+        color: #111111 !important;
+    }
+
+    /* Streamlit popover */
+    [data-baseweb="popover"] {
+        background-color: #ffffff !important;
+        color: #111111 !important;
     }
 
     @media screen and (max-width: 1024px) {
