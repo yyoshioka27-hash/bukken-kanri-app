@@ -235,6 +235,17 @@
           "due_date": "2026-08-01",
           "attachment_path": "",
           "created_at": "2026-05-21 11:06"
+        },
+        {
+          "id": "9dc83d9d-0a2c-4857-8b76-224503a1a778",
+          "date": "2026-05-28",
+          "person": "栗村さん",
+          "content": "表層改良の地耐力30kN/㎡(長期)を雑詳細図に追記した",
+          "status": "対応済",
+          "priority": "低",
+          "due_date": "2026-05-28",
+          "attachment_path": "",
+          "created_at": "2026-05-28 00:25"
         }
       ],
       "structural_note": "20260518_計算書修正、構造図修正→確認申請の準備完了",
