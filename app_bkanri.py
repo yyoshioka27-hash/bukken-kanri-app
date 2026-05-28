@@ -24,7 +24,7 @@ DATA_FILE_NAME = "bukken_data.json"
 GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
-PRIORITIES = ["低", "中", "高"]
+PRIORITIES = ["低", "中", "高", "スケジュール"]
 
 LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
 APP_STATE_STORAGE_KEY = "bukken_kanri_app_state_v1"
@@ -548,6 +548,58 @@ def get_today_tasks(data):
     return sorted(rows, key=lambda x: (x.get("due_date", ""), x.get("priority", "")))
 
 
+
+
+def get_schedule_logs(data):
+    rows = []
+
+    for project in data.get("projects", []):
+        for log in project.get("logs", []):
+            if log.get("priority") != "スケジュール":
+                continue
+
+            row = dict(log)
+            row["project_name"] = project.get("name", "")
+            rows.append(row)
+
+    def sort_key(row):
+        due = parse_date_safe(row.get("due_date", ""))
+        log_date = parse_date_safe(row.get("date", ""))
+        due_missing = due is None
+        return (
+            due_missing,
+            due or date.max,
+            log_date or date.max,
+        )
+
+    return sorted(rows, key=sort_key)
+
+
+def render_schedule_card(log):
+    due_text = log.get("due_date", "") or "（未設定）"
+    st.markdown(
+        f"""
+        <div style="
+            border:1px solid #cfd8e3;
+            border-left:6px solid #4d94ff;
+            background:#ffffff;
+            border-radius:10px;
+            padding:12px;
+            margin-bottom:10px;
+            color:#111111;
+            line-height:1.6;
+            word-break:break-word;
+        ">
+            <div style="font-weight:700; font-size:1.05rem; margin-bottom:4px;">{html.escape(str(log.get('project_name', '')))}</div>
+            <div><b>日付:</b> {html.escape(str(log.get('date', '')))}</div>
+            <div><b>期限:</b> {html.escape(str(due_text))}</div>
+            <div><b>状態:</b> {html.escape(str(log.get('status', '')))}</div>
+            <div style="margin-top:6px;"><b>内容・メモ:</b><br>{html.escape(str(log.get('content', ''))).replace(chr(10), '<br>')}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def simple_summary(text):
     text = text.replace("\r", "\n")
     lines = [x.strip() for x in text.split("\n") if x.strip()]
@@ -969,7 +1021,13 @@ st.markdown(
 calendar_url = "https://calendar.google.com/"
 
 st.title("📁 物件管理アプリ")
-st.link_button("📅 カレンダー", calendar_url, use_container_width=False)
+header_col1, header_col2 = st.columns([1, 1])
+with header_col1:
+    st.link_button("📅 カレンダー", calendar_url, use_container_width=True)
+with header_col2:
+    if st.button("📅 スケジュール", key="show_schedule_list", use_container_width=True):
+        st.session_state["page_mode"] = "schedule"
+        st.rerun()
 
 
 if "selected_project_id" not in st.session_state:
@@ -992,6 +1050,9 @@ if "show_structural_memo_editor" not in st.session_state:
 
 if "filter_mode" not in st.session_state:
     st.session_state["filter_mode"] = "すべて"
+
+if "page_mode" not in st.session_state:
+    st.session_state["page_mode"] = "main"
 
 if "data" not in st.session_state:
     app_settings = restore_app_settings()
@@ -1184,6 +1245,22 @@ if st.session_state.get("mobile_view") == "list":
     st.markdown('<div class="mobile-panel">', unsafe_allow_html=True)
     render_project_management_panel("mobile")
     st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
+
+if st.session_state.get("page_mode") == "schedule":
+    st.subheader("📅 スケジュール一覧（全物件）")
+    schedule_logs = get_schedule_logs(data)
+
+    if st.button("← 物件詳細に戻る", key="back_to_main_from_schedule"):
+        st.session_state["page_mode"] = "main"
+        st.rerun()
+
+    if not schedule_logs:
+        st.info("重要度が『スケジュール』のデータはありません。")
+    else:
+        st.caption("表示順：期限が近い順（期限未設定は最後）→ 日付が古い順")
+        for row in schedule_logs:
+            render_schedule_card(row)
     st.stop()
 
 
