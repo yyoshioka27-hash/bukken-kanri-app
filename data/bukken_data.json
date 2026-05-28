@@ -313,7 +313,19 @@
       "folder_path": "",
       "schedule_pdf_path": "",
       "created_at": "2026-05-28 02:44",
-      "logs": []
+      "logs": [
+        {
+          "id": "557a88ae-24ea-4bdf-86cb-5df740c7a730",
+          "date": "2026-05-28",
+          "person": "佐々木さん",
+          "content": "10/中：事前申請、12/中：本申請",
+          "status": "未対応",
+          "priority": "スケジュール",
+          "due_date": "2026-10-15",
+          "attachment_path": "",
+          "created_at": "2026-05-28 02:49"
+        }
+      ]
     }
   ]
 }
