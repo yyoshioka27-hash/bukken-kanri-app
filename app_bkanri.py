@@ -822,12 +822,46 @@ st.markdown(
         -webkit-text-fill-color: #111111 !important;
     }
 
-    /* calendar popup */
-    div[role="dialog"],
-    div[role="listbox"],
-    ul[role="listbox"] {
+    /* Streamlit date_input calendar popup 強制ライト化 */
+    [data-baseweb="calendar"],
+    [data-baseweb="calendar"] *,
+    [data-baseweb="datepicker"],
+    [data-baseweb="datepicker"] *,
+    [data-baseweb="popover"],
+    [data-baseweb="popover"] * {
+        color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
+    }
+
+    [data-baseweb="calendar"],
+    [data-baseweb="datepicker"],
+    [data-baseweb="popover"],
+    [data-baseweb="popover"] > div {
+        background-color: #ffffff !important;
+    }
+
+    [data-baseweb="calendar"] div,
+    [data-baseweb="calendar"] button,
+    [data-baseweb="calendar"] span {
         background-color: #ffffff !important;
         color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
+    }
+
+    /* 選択中の日付だけは見やすく */
+    [data-baseweb="calendar"] button[aria-selected="true"],
+    [data-baseweb="calendar"] [aria-selected="true"] {
+        background-color: #ff4b4b !important;
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+    }
+
+    /* 月・年・曜日 */
+    [data-baseweb="calendar"] [role="heading"],
+    [data-baseweb="calendar"] [role="gridcell"],
+    [data-baseweb="calendar"] [role="columnheader"] {
+        color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
     }
 
     /* dropdown item */
