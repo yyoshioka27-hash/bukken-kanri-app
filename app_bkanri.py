@@ -685,10 +685,11 @@ st.markdown(
         color: #111111 !important;
     }
 
-    input, textarea {
+    input, textarea, select, option {
         font-size: 18px !important;
         color: #111111 !important;
         background-color: #ffffff !important;
+        -webkit-text-fill-color: #111111 !important;
     }
 
     button {
@@ -754,9 +755,44 @@ st.markdown(
     /* input */
     input,
     textarea,
-    select {
+    select,
+    option {
         background-color: #ffffff !important;
         color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
+    }
+
+    input[type="date"],
+    input[type="text"],
+    input[type="file"],
+    textarea,
+    select {
+        color: #111111 !important;
+        background-color: #ffffff !important;
+        -webkit-text-fill-color: #111111 !important;
+        color-scheme: light !important;
+    }
+
+    select option {
+        color: #111111 !important;
+        background-color: #ffffff !important;
+    }
+
+    div[data-baseweb="select"] *,
+    div[data-baseweb="input"] *,
+    div[data-baseweb="textarea"] * {
+        color: #111111 !important;
+        -webkit-text-fill-color: #111111 !important;
+    }
+
+    .stDateInput input,
+    .stTextInput input,
+    .stTextArea textarea,
+    .stSelectbox div,
+    .stFileUploader,
+    .stFileUploader * {
+        color: #111111 !important;
+        background-color: #ffffff !important;
         -webkit-text-fill-color: #111111 !important;
     }
 
