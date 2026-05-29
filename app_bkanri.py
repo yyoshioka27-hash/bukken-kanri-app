@@ -10,7 +10,9 @@ import urllib.parse
 import base64
 import requests
 from datetime import datetime, date
+from io import BytesIO
 from pathlib import Path
+import streamlit.components.v1 as components
 
 try:
     from streamlit_local_storage import LocalStorage
@@ -198,11 +200,16 @@ def get_export_text_dir():
     return get_data_dir() / "export_text"
 
 
+def get_export_pdf_dir():
+    return get_data_dir() / "export_pdf"
+
+
 def init_dirs():
     data_dir = get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
     get_backup_dir().mkdir(parents=True, exist_ok=True)
     get_export_text_dir().mkdir(parents=True, exist_ok=True)
+    get_export_pdf_dir().mkdir(parents=True, exist_ok=True)
 
 
 def normalize_data(data):
@@ -397,6 +404,193 @@ def build_structural_memo_text(project):
     lines.append("# END")
     return "\n".join(lines)
 
+
+
+
+def build_structural_memo_pdf(project):
+    """選択物件のやり取り履歴をPDF出力用バイト列として作成する。"""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    buffer = BytesIO()
+    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=14 * mm,
+        bottomMargin=14 * mm,
+        title=f"{project.get('name', '')}_やり取り履歴",
+    )
+    styles = getSampleStyleSheet()
+    base_style = ParagraphStyle(
+        "JapaneseBody",
+        parent=styles["BodyText"],
+        fontName="HeiseiMin-W3",
+        fontSize=10,
+        leading=14,
+        wordWrap="CJK",
+        spaceAfter=4,
+    )
+    title_style = ParagraphStyle(
+        "JapaneseTitle",
+        parent=styles["Title"],
+        fontName="HeiseiMin-W3",
+        fontSize=16,
+        leading=22,
+        wordWrap="CJK",
+        spaceAfter=10,
+    )
+    section_style = ParagraphStyle(
+        "JapaneseSection",
+        parent=base_style,
+        fontSize=12,
+        leading=16,
+        spaceBefore=8,
+        spaceAfter=6,
+    )
+
+    def paragraph(text, style=base_style):
+        escaped = html.escape(str(text)).replace("\n", "<br/>")
+        return Paragraph(escaped, style)
+
+    logs = sorted(project.get("logs", []), key=lambda x: x.get("date", ""))
+    story = [paragraph("構造設計メモ / やり取り履歴", title_style)]
+    story.extend(
+        [
+            paragraph(f"物件名：{project.get('name', '')}"),
+            paragraph(f"相手先・担当：{project.get('client', '')}"),
+            paragraph(f"登録日：{project.get('created_at', '')}"),
+            paragraph(f"出力日：{datetime.now().strftime('%Y-%m-%d %H:%M')}"),
+            Spacer(1, 4 * mm),
+            paragraph("【パス情報】", section_style),
+            paragraph(f"物件フォルダ：{project.get('folder_path', '')}"),
+            paragraph(f"工程表PDF：{project.get('schedule_pdf_path', '')}"),
+            Spacer(1, 4 * mm),
+            paragraph("【集計】", section_style),
+            paragraph(f"未対応・対応中：{count_open_logs(project)} 件"),
+            paragraph(f"重要度高：{count_high_logs(project)} 件"),
+            Spacer(1, 4 * mm),
+            paragraph("【やり取り履歴】", section_style),
+        ]
+    )
+
+    if not logs:
+        story.append(paragraph("表示するやり取りはありません。"))
+    else:
+        for i, log in enumerate(logs, start=1):
+            attachment_path = log.get("attachment_path", "")
+            story.append(paragraph("-" * 58))
+            story.append(paragraph(f"No.{i}"))
+            story.append(paragraph(f"日付：{log.get('date', '')}"))
+            story.append(paragraph(f"状態：{log.get('status', '')}"))
+            story.append(paragraph(f"期限：{log.get('due_date', '')}"))
+            story.append(paragraph(f"相手先：{log.get('person', '')}"))
+            story.append(paragraph(f"重要度：{log.get('priority', '')}"))
+            if attachment_path:
+                story.append(paragraph(f"添付：{attachment_path}"))
+            story.append(paragraph("内容："))
+            story.append(paragraph(log.get("content", "")))
+            story.append(Spacer(1, 2 * mm))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def save_structural_memo_pdf(project):
+    """構造設計メモPDFを保存し、保存パスとPDFバイト列を返す。"""
+    init_dirs()
+    pdf_bytes = build_structural_memo_pdf(project)
+    today = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = sanitize_windows_filename(project.get("name", "project"))
+    file_path = get_export_pdf_dir() / f"{safe_name}_やり取り履歴_{today}.pdf"
+
+    with open(file_path, "wb") as f:
+        f.write(pdf_bytes)
+
+    return file_path, pdf_bytes
+
+
+def render_voice_recognition_controls(textarea_label, textarea_key):
+    """ブラウザの音声認識APIが使える場合だけ、既存テキスト欄へ文字起こしを追記する操作UIを表示する。"""
+    target_label = html.escape(textarea_label, quote=True)
+    target_key = html.escape(textarea_key, quote=True)
+    components.html(
+        f"""
+        <div style="border:1px solid #cfd8e3; border-radius:10px; padding:12px; background:#f8fbff; color:#111; font-family:sans-serif;">
+          <div style="font-weight:700; margin-bottom:8px;">🎙️ ブラウザ音声認識</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <button id="start" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #4d94ff; background:#ffffff; color:#111;">録音開始</button>
+            <button id="stop" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #999; background:#ffffff; color:#111;">録音停止</button>
+          </div>
+          <div id="status" style="font-size:13px; line-height:1.5;">ブラウザ音声認識が使えない場合も、下のテキスト入力欄を通常どおり使えます。</div>
+          <script>
+            const statusEl = document.getElementById('status');
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            let recognition = null;
+
+            function findTextarea() {{
+              const doc = window.parent.document;
+              const byAria = doc.querySelector('textarea[aria-label="{target_label}"]');
+              if (byAria) return byAria;
+              const all = Array.from(doc.querySelectorAll('textarea'));
+              return all.find((el) => el.id && el.id.includes('{target_key}')) || all[all.length - 1] || null;
+            }}
+
+            function appendTranscript(text) {{
+              const textarea = findTextarea();
+              if (!textarea) {{
+                statusEl.textContent = '音声認識結果を入力欄へ反映できませんでした。結果をコピーして貼り付けてください: ' + text;
+                return;
+              }}
+              const prefix = textarea.value && !textarea.value.endsWith('\n') ? '\n' : '';
+              textarea.value = textarea.value + prefix + text;
+              textarea.dispatchEvent(new Event('input', {{ bubbles: true }}));
+              textarea.dispatchEvent(new Event('change', {{ bubbles: true }}));
+              textarea.focus();
+              statusEl.textContent = '文字起こしを音声メモ欄に追加しました。必要に応じて編集してから保存してください。';
+            }}
+
+            if (!SpeechRecognition) {{
+              statusEl.textContent = 'このブラウザでは録音開始/停止による直接文字起こしは使えません。下のテキスト欄で、iPad/iPhone標準キーボードのマイク入力または手入力を使ってください。';
+              document.getElementById('start').disabled = true;
+              document.getElementById('stop').disabled = true;
+            }} else {{
+              recognition = new SpeechRecognition();
+              recognition.lang = 'ja-JP';
+              recognition.interimResults = false;
+              recognition.continuous = true;
+              recognition.onstart = () => statusEl.textContent = '録音中です。話した内容は認識完了ごとに下の音声メモ欄へ追加されます。';
+              recognition.onerror = (event) => statusEl.textContent = '音声認識エラー: ' + event.error + '。通常のテキスト入力欄としても利用できます。';
+              recognition.onend = () => statusEl.textContent = '録音を停止しました。必要に応じて音声メモ欄を編集してください。';
+              recognition.onresult = (event) => {{
+                const text = Array.from(event.results)
+                  .slice(event.resultIndex)
+                  .map((result) => result[0].transcript)
+                  .join('')
+                  .trim();
+                if (text) appendTranscript(text);
+              }};
+            }}
+
+            document.getElementById('start').addEventListener('click', () => {{
+              if (recognition) recognition.start();
+            }});
+            document.getElementById('stop').addEventListener('click', () => {{
+              if (recognition) recognition.stop();
+            }});
+          </script>
+        </div>
+        """,
+        height=150,
+    )
 
 def save_structural_memo_text(project):
     """構造設計メモtxtを保存し、保存パスと本文を返す。"""
@@ -1341,6 +1535,16 @@ with col4:
         use_container_width=True,
     )
 
+    history_pdf_bytes = build_structural_memo_pdf(project)
+    st.download_button(
+        "📄 履歴PDF出力",
+        data=history_pdf_bytes,
+        file_name=f"{safe_project_name}_やり取り履歴.pdf",
+        mime="application/pdf",
+        key=f"download_history_pdf_{project['id']}",
+        use_container_width=True,
+    )
+
     if st.button("📝 構造設計メモ", key=f"open_structural_memo_{project['id']}", use_container_width=True):
         st.session_state["show_structural_memo_editor"] = not st.session_state["show_structural_memo_editor"]
 
@@ -1398,6 +1602,57 @@ if st.session_state["show_structural_memo_editor"]:
         )
 
     st.divider()
+
+st.divider()
+
+st.subheader("🎙️ 音声メモ")
+st.caption(
+    "音声ファイルは保存せず、入力・文字起こしされたテキストだけを保存します。"
+    "iPad/iPhoneでは下の入力欄をタップして、標準キーボードのマイク入力も利用できます。"
+)
+
+voice_memo_key = f"voice_memo_text_{project['id']}"
+voice_memo_label = "音声メモ（テキスト）"
+if voice_memo_key not in st.session_state:
+    st.session_state[voice_memo_key] = ""
+
+render_voice_recognition_controls(voice_memo_label, voice_memo_key)
+
+voice_memo_text = st.text_area(
+    voice_memo_label,
+    value=st.session_state[voice_memo_key],
+    height=150,
+    key=voice_memo_key,
+    placeholder="ここに音声入力または手入力したメモが表示されます。保存前に自由に編集できます。",
+    help="ブラウザ音声認識が使えない場合も通常のテキスト入力欄として利用できます。",
+)
+
+vm_col1, vm_col2 = st.columns([1, 3])
+with vm_col1:
+    if st.button("音声メモを履歴に追加", key=f"add_voice_memo_{project['id']}", type="primary", use_container_width=True):
+        if not voice_memo_text.strip():
+            st.warning("音声メモのテキストを入力してください。")
+        else:
+            now_text = datetime.now().strftime("%Y-%m-%d %H:%M")
+            project["logs"].append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "date": str(date.today()),
+                    "person": "音声メモ",
+                    "content": f"【音声メモ {now_text}】\n{voice_memo_text.strip()}",
+                    "status": "対応中",
+                    "priority": "中",
+                    "due_date": str(date.today()),
+                    "attachment_path": "",
+                    "created_at": now_text,
+                }
+            )
+            persist_data(data)
+            st.success("音声メモを日時付きで履歴に追加しました。")
+            st.rerun()
+
+with vm_col2:
+    st.caption("保存すると既存のやり取り履歴と同じJSON項目（id/date/person/content/status/priority/due_date/attachment_path/created_at）で追加されます。")
 
 st.divider()
 
