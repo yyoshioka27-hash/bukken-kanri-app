@@ -524,17 +524,26 @@ def render_voice_recognition_controls(textarea_label, textarea_key):
     target_key = html.escape(textarea_key, quote=True)
     components.html(
         f"""
-        <div style="border:1px solid #cfd8e3; border-radius:10px; padding:12px; background:#f8fbff; color:#111; font-family:sans-serif;">
+        <div id="voice-recognition-panel" style="border:1px solid #cfd8e3; border-radius:10px; padding:12px; background:#f8fbff; color:#111; font-family:sans-serif; transition:border-color .2s, box-shadow .2s, background .2s;">
           <div style="font-weight:700; margin-bottom:8px;">🎙️ ブラウザ音声認識</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-            <button id="start" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #4d94ff; background:#ffffff; color:#111;">録音開始</button>
-            <button id="stop" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #999; background:#ffffff; color:#111;">録音停止</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; align-items:center;">
+            <button id="start" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #4d94ff; background:#ffffff; color:#111; font-weight:700; min-width:104px;">録音開始</button>
+            <button id="stop" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #999; background:#ffffff; color:#111; font-weight:700; min-width:104px;" disabled>録音停止</button>
+            <span id="recording-badge" aria-live="polite" style="display:none; align-items:center; gap:6px; padding:6px 10px; border:2px solid #d60000; border-radius:999px; background:#fff1f1; color:#b00000; font-weight:800;">🔴 録音中です</span>
           </div>
-          <div id="status" style="font-size:13px; line-height:1.5;">ブラウザ音声認識が使えない場合も、下のテキスト入力欄を通常どおり使えます。</div>
+          <div id="status" role="status" aria-live="polite" style="font-size:13px; line-height:1.5; padding:8px 10px; border-radius:8px; background:#ffffff; border:1px solid #e2e8f0;">ブラウザ音声認識が使えない場合も、下のテキスト入力欄を通常どおり使えます。</div>
           <script>
+            const panelEl = document.getElementById('voice-recognition-panel');
             const statusEl = document.getElementById('status');
+            const startButton = document.getElementById('start');
+            const stopButton = document.getElementById('stop');
+            const recordingBadge = document.getElementById('recording-badge');
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             let recognition = null;
+            let isRecording = false;
+            let receivedTranscript = false;
+            let stoppedByUser = false;
+            let errorHandled = false;
 
             function findTextarea() {{
               const doc = window.parent.document;
@@ -544,10 +553,50 @@ def render_voice_recognition_controls(textarea_label, textarea_key):
               return all.find((el) => el.id && el.id.includes('{target_key}')) || all[all.length - 1] || null;
             }}
 
+            function setStatus(message, tone = 'normal') {{
+              statusEl.textContent = message;
+              const colors = {{
+                normal: ['#ffffff', '#e2e8f0', '#111'],
+                recording: ['#fff1f1', '#d60000', '#b00000'],
+                success: ['#f0fff4', '#38a169', '#22543d'],
+                error: ['#fff5f5', '#e53e3e', '#9b2c2c']
+              }};
+              const [background, border, color] = colors[tone] || colors.normal;
+              statusEl.style.background = background;
+              statusEl.style.borderColor = border;
+              statusEl.style.color = color;
+            }}
+
+            function setRecordingUI(recording) {{
+              isRecording = recording;
+              if (recording) {{
+                panelEl.style.borderColor = '#d60000';
+                panelEl.style.boxShadow = '0 0 0 3px rgba(214, 0, 0, 0.16)';
+                panelEl.style.background = '#fff7f7';
+                recordingBadge.style.display = 'inline-flex';
+                startButton.textContent = '録音停止';
+                startButton.style.borderColor = '#d60000';
+                startButton.style.background = '#d60000';
+                startButton.style.color = '#ffffff';
+                stopButton.disabled = false;
+                setStatus('🔴 録音中です', 'recording');
+              }} else {{
+                panelEl.style.borderColor = '#cfd8e3';
+                panelEl.style.boxShadow = 'none';
+                panelEl.style.background = '#f8fbff';
+                recordingBadge.style.display = 'none';
+                startButton.textContent = '録音開始';
+                startButton.style.borderColor = '#4d94ff';
+                startButton.style.background = '#ffffff';
+                startButton.style.color = '#111';
+                stopButton.disabled = true;
+              }}
+            }}
+
             function appendTranscript(text) {{
               const textarea = findTextarea();
               if (!textarea) {{
-                statusEl.textContent = '音声認識結果を入力欄へ反映できませんでした。結果をコピーして貼り付けてください: ' + text;
+                setStatus('音声認識結果を入力欄へ反映できませんでした。結果をコピーして貼り付けてください: ' + text, 'error');
                 return;
               }}
               const prefix = textarea.value && !textarea.value.endsWith('\n') ? '\n' : '';
@@ -555,21 +604,68 @@ def render_voice_recognition_controls(textarea_label, textarea_key):
               textarea.dispatchEvent(new Event('input', {{ bubbles: true }}));
               textarea.dispatchEvent(new Event('change', {{ bubbles: true }}));
               textarea.focus();
-              statusEl.textContent = '文字起こしを音声メモ欄に追加しました。必要に応じて編集してから保存してください。';
+              receivedTranscript = true;
+              setStatus('文字起こしを音声メモ欄に追加しました。必要に応じて編集してから保存してください。', 'success');
+            }}
+
+            function startRecording() {{
+              if (!recognition || isRecording) return;
+              receivedTranscript = false;
+              stoppedByUser = false;
+              errorHandled = false;
+              try {{
+                recognition.start();
+              }} catch (error) {{
+                if (error.name === 'InvalidStateError') {{
+                  setRecordingUI(true);
+                  return;
+                }}
+                setRecordingUI(false);
+                errorHandled = true;
+                setStatus('音声認識に失敗しました。もう一度録音してください', 'error');
+              }}
+            }}
+
+            function stopRecording() {{
+              if (!recognition || !isRecording) return;
+              stoppedByUser = true;
+              recognition.stop();
             }}
 
             if (!SpeechRecognition) {{
-              statusEl.textContent = 'このブラウザでは録音開始/停止による直接文字起こしは使えません。下のテキスト欄で、iPad/iPhone標準キーボードのマイク入力または手入力を使ってください。';
-              document.getElementById('start').disabled = true;
-              document.getElementById('stop').disabled = true;
+              setStatus('このブラウザでは録音開始/停止による直接文字起こしは使えません。下のテキスト欄で、iPad/iPhone標準キーボードのマイク入力または手入力を使ってください。', 'error');
+              startButton.disabled = true;
+              stopButton.disabled = true;
             }} else {{
               recognition = new SpeechRecognition();
               recognition.lang = 'ja-JP';
               recognition.interimResults = false;
               recognition.continuous = true;
-              recognition.onstart = () => statusEl.textContent = '録音中です。話した内容は認識完了ごとに下の音声メモ欄へ追加されます。';
-              recognition.onerror = (event) => statusEl.textContent = '音声認識エラー: ' + event.error + '。通常のテキスト入力欄としても利用できます。';
-              recognition.onend = () => statusEl.textContent = '録音を停止しました。必要に応じて音声メモ欄を編集してください。';
+              recognition.onstart = () => {{
+                setRecordingUI(true);
+              }};
+              recognition.onerror = (event) => {{
+                setRecordingUI(false);
+                errorHandled = true;
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {{
+                  setStatus('ブラウザまたは端末のマイク使用許可を確認してください', 'error');
+                }} else {{
+                  setStatus('音声認識に失敗しました。もう一度録音してください', 'error');
+                }}
+              }};
+              recognition.onend = () => {{
+                const wasStoppedByUser = stoppedByUser;
+                const hadError = errorHandled;
+                setRecordingUI(false);
+                stoppedByUser = false;
+                errorHandled = false;
+                if (hadError) return;
+                if (wasStoppedByUser || receivedTranscript) {{
+                  setStatus('録音を停止しました', 'success');
+                }} else if (!receivedTranscript) {{
+                  setStatus('音声認識に失敗しました。もう一度録音してください', 'error');
+                }}
+              }};
               recognition.onresult = (event) => {{
                 const text = Array.from(event.results)
                   .slice(event.resultIndex)
@@ -580,16 +676,18 @@ def render_voice_recognition_controls(textarea_label, textarea_key):
               }};
             }}
 
-            document.getElementById('start').addEventListener('click', () => {{
-              if (recognition) recognition.start();
+            startButton.addEventListener('click', () => {{
+              if (isRecording) {{
+                stopRecording();
+              }} else {{
+                startRecording();
+              }}
             }});
-            document.getElementById('stop').addEventListener('click', () => {{
-              if (recognition) recognition.stop();
-            }});
+            stopButton.addEventListener('click', stopRecording);
           </script>
         </div>
         """,
-        height=150,
+        height=190,
     )
 
 def save_structural_memo_text(project):
