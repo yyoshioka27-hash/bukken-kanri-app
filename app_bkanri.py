@@ -1161,6 +1161,77 @@ st.markdown(
         color: #111111 !important;
     }
 
+    /* Googleカレンダー登録リンクをiPad/Safariでも読みやすいライト配色に固定 */
+    [data-testid="stLinkButton"] a[href*="calendar.google.com"],
+    a[href*="calendar.google.com"][role="button"],
+    a[href*="calendar.google.com"][data-testid="baseLinkButton-secondary"] {
+        background-color: #e5e7eb !important;
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        border: 1px solid #d1d5db !important;
+        box-shadow: none !important;
+        color-scheme: light !important;
+    }
+
+    [data-testid="stLinkButton"] a[href*="calendar.google.com"] *,
+    a[href*="calendar.google.com"][role="button"] *,
+    a[href*="calendar.google.com"][data-testid="baseLinkButton-secondary"] * {
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        fill: #111827 !important;
+        stroke: #111827 !important;
+    }
+
+    [data-testid="stLinkButton"] a[href*="calendar.google.com"]:hover,
+    [data-testid="stLinkButton"] a[href*="calendar.google.com"]:focus-visible,
+    a[href*="calendar.google.com"][role="button"]:hover,
+    a[href*="calendar.google.com"][role="button"]:focus-visible,
+    a[href*="calendar.google.com"][data-testid="baseLinkButton-secondary"]:hover,
+    a[href*="calendar.google.com"][data-testid="baseLinkButton-secondary"]:focus-visible {
+        background-color: #f3f4f6 !important;
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        border-color: #d1d5db !important;
+    }
+
+    /* =========================
+       音声メモ: 録音ウィジェット全体をライト配色に固定
+       ========================= */
+    [data-testid="stAudioInput"] {
+        background-color: #f3f4f6 !important;
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 12px !important;
+        padding: 12px !important;
+        color-scheme: light !important;
+    }
+
+    [data-testid="stAudioInput"] *,
+    [data-testid="stAudioInput"] label,
+    [data-testid="stAudioInput"] p,
+    [data-testid="stAudioInput"] span,
+    [data-testid="stAudioInput"] div {
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+    }
+
+    [data-testid="stAudioInput"] svg,
+    [data-testid="stAudioInput"] svg * {
+        color: #111827 !important;
+        fill: currentColor !important;
+        stroke: currentColor !important;
+    }
+
+    [data-testid="stAudioInput"] audio,
+    [data-testid="stAudioInput"] [data-testid="stAudioInputFile"],
+    [data-testid="stAudioInput"] [data-testid="stAudioInputDropzone"] {
+        background-color: #e5e7eb !important;
+        color: #111827 !important;
+        border-color: #d1d5db !important;
+        color-scheme: light !important;
+    }
+
     /* =========================
        音声メモ: マイクボタンのSafari強制スタイル
        ========================= */
