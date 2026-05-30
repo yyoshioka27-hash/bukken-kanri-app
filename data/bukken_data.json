@@ -200,17 +200,6 @@
           "due_date": "2026-06-06",
           "attachment_path": "",
           "created_at": "2026-05-29 00:25"
-        },
-        {
-          "id": "ddbee60b-24de-4da0-abdf-4641fad0afef",
-          "date": "2026-05-30",
-          "person": "音声メモ",
-          "content": "【音声メモ 2026-05-30 10:48】\n5月30日、沖縄運動場の計算書をまとめた",
-          "status": "対応中",
-          "priority": "中",
-          "due_date": "2026-05-30",
-          "attachment_path": "",
-          "created_at": "2026-05-30 10:48"
         }
       ],
       "structural_note": "20260511_校舎、屋内運動場とも現状での計算書をまとめた。\n　　　　（地盤改良の二次設計はまだ修正していない）",
