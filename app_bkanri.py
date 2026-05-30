@@ -1144,6 +1144,93 @@ st.markdown(
         color: #111111 !important;
     }
 
+    /* =========================
+       音声メモ: マイクボタンのSafari強制スタイル
+       ========================= */
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"] {
+        width: 48px !important;
+        min-width: 48px !important;
+        height: 48px !important;
+        min-height: 48px !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 50% !important;
+        border: 1px solid #CCCCCC !important;
+        box-shadow: none !important;
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+        color-scheme: light !important;
+    }
+
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"] svg,
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"] svg * {
+        color: inherit !important;
+        fill: currentColor !important;
+        stroke: currentColor !important;
+    }
+
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"][aria-label="Record"] {
+        background: #E5E5E5 !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+    }
+
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"][aria-label="Record"]:hover,
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"][aria-label="Record"]:focus-visible {
+        background: #D6D6D6 !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+    }
+
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"][aria-label="Stop recording"] {
+        background: #FF4D4F !important;
+        border-color: #FF4D4F !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        animation: voice-recording-pulse 1.2s ease-in-out infinite;
+    }
+
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"][aria-label="Stop recording"]:hover,
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"][aria-label="Stop recording"]:focus-visible {
+        background: #E03133 !important;
+        border-color: #E03133 !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }
+
+    [data-testid="stAudioInput"]:has([data-testid="stAudioInputActionButton"][aria-label="Stop recording"])::after {
+        content: "🔴 録音中...";
+        display: inline-flex;
+        align-items: center;
+        margin-top: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #FFF1F0;
+        color: #CF1322 !important;
+        -webkit-text-fill-color: #CF1322 !important;
+        border: 1px solid #FFA39E;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    [data-testid="stAudioInput"]:has([data-testid="stAudioInputActionButton"][aria-label="Stop recording"]) [data-testid="stAudioInputWaveformTimeCode"] {
+        color: #CF1322 !important;
+        -webkit-text-fill-color: #CF1322 !important;
+        font-weight: 700 !important;
+    }
+
+    @keyframes voice-recording-pulse {
+        0%, 100% {
+            box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.45);
+        }
+        50% {
+            box-shadow: 0 0 0 8px rgba(255, 77, 79, 0);
+        }
+    }
+
     /* Streamlit popover */
     [data-baseweb="popover"] {
         background-color: #ffffff !important;
