@@ -4,11 +4,13 @@ import streamlit as st
 import json
 import os
 import shutil
+import tempfile
 import uuid
 import html
 import urllib.parse
 import base64
 import requests
+from faster_whisper import WhisperModel
 from datetime import datetime, date
 from io import BytesIO
 from pathlib import Path
@@ -517,7 +519,30 @@ def save_structural_memo_pdf(project):
     return file_path, pdf_bytes
 
 
-def render_audio_memo_recorder(project_id):
+@st.cache_resource(show_spinner=False)
+def load_whisper_model(model_size="small"):
+    """faster-whisper のモデルを一度だけ読み込み、以後はキャッシュして再利用する。"""
+    return WhisperModel(model_size, device="cpu", compute_type="int8")
+
+
+def transcribe_audio_bytes(audio_bytes, model_size="small"):
+    """録音バイト列を一時 wav ファイルへ保存し、日本語文字起こし結果を返す。"""
+    temp_audio_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
+            temp_audio.write(audio_bytes)
+            temp_audio.flush()
+            temp_audio_path = temp_audio.name
+
+        model = load_whisper_model(model_size)
+        segments, _ = model.transcribe(temp_audio_path, language="ja")
+        return "".join(segment.text for segment in segments).strip()
+    finally:
+        if temp_audio_path:
+            Path(temp_audio_path).unlink(missing_ok=True)
+
+
+def render_audio_memo_recorder(project_id, voice_memo_key=None):
     """ブラウザのマイク録音ウィジェットを表示し、録音データを再生確認できるようにする。"""
     st.markdown("### 🎙️ 音声メモを録音")
     st.caption(
@@ -529,6 +554,7 @@ def render_audio_memo_recorder(project_id):
     audio_state_key = f"voice_memo_audio_bytes_{project_id}"
     audio_mime_key = f"voice_memo_audio_mime_{project_id}"
     audio_name_key = f"voice_memo_audio_name_{project_id}"
+    transcript_key = f"voice_memo_transcript_{project_id}"
 
     if audio_state_key not in st.session_state:
         st.session_state[audio_state_key] = None
@@ -536,6 +562,8 @@ def render_audio_memo_recorder(project_id):
         st.session_state[audio_mime_key] = "audio/wav"
     if audio_name_key not in st.session_state:
         st.session_state[audio_name_key] = ""
+    if transcript_key not in st.session_state:
+        st.session_state[transcript_key] = ""
 
     if not hasattr(st, "audio_input"):
         st.error(
@@ -557,6 +585,7 @@ def render_audio_memo_recorder(project_id):
             st.session_state[audio_state_key] = audio_bytes
             st.session_state[audio_mime_key] = getattr(recorded_audio, "type", None) or "audio/wav"
             st.session_state[audio_name_key] = getattr(recorded_audio, "name", "") or "recorded_audio.wav"
+            st.session_state[transcript_key] = ""
             st.success("録音データを取得しました。下のプレーヤーで再生確認できます。")
         else:
             st.session_state[audio_state_key] = None
@@ -572,6 +601,30 @@ def render_audio_memo_recorder(project_id):
             f"取得済み音声: {len(audio_bytes):,} bytes"
             f" / {st.session_state.get(audio_mime_key, 'audio/wav')}"
         )
+        st.info(
+            "文字起こしにはローカルの faster-whisper（small / CPU int8）を使います。"
+            "初回はモデルの読み込み・取得で時間がかかる場合があります。"
+        )
+
+        if st.button("文字起こしする", key=f"transcribe_voice_audio_{project_id}", type="primary"):
+            try:
+                with st.spinner("文字起こし中です"):
+                    transcript = transcribe_audio_bytes(audio_bytes)
+
+                st.session_state[transcript_key] = transcript
+                if voice_memo_key:
+                    st.session_state[voice_memo_key] = transcript
+
+                if transcript:
+                    st.success("文字起こしが完了しました。音声メモ欄へ自動入力しました。")
+                else:
+                    st.warning("文字起こし結果が空でした。録音音量やマイク設定を確認してください。")
+            except Exception as e:
+                st.error(f"文字起こしに失敗しました。原因: {e}")
+
+        if st.session_state.get(transcript_key):
+            st.markdown("#### 文字起こし結果")
+            st.write(st.session_state[transcript_key])
     else:
         st.warning(
             "まだ録音データを取得できていません。上の『録音開始・停止』で録音してください。"
@@ -1693,29 +1746,28 @@ st.divider()
 st.subheader("🎙️ 音声メモ")
 st.caption(
     "ブラウザのマイクから録音し、録音後は st.audio のプレーヤーで再生確認できます。"
-    "現時点では音声ファイル自体はJSONへ保存せず、下の音声メモ欄に手入力した内容、または将来の文字起こし結果を履歴として保存する構成です。"
-)
-
-render_audio_memo_recorder(project["id"])
-
-st.markdown("### 📝 音声メモ欄")
-st.caption(
-    "録音を確認したあと、内容を手入力してください。"
-    "将来、文字起こしを追加する場合もこの欄に反映してから保存できます。"
-    "iPad/iPhoneでは入力欄をタップして標準キーボードのマイク入力も利用できます。"
+    "音声ファイル自体はJSONへ保存せず、下の音声メモ欄に手入力した内容、または文字起こし結果を履歴として保存する構成です。"
 )
 
 voice_memo_key = f"voice_memo_text_{project['id']}"
-voice_memo_label = "音声メモ（手入力・将来の文字起こし用）"
+voice_memo_label = "音声メモ（手入力・文字起こし用）"
 if voice_memo_key not in st.session_state:
     st.session_state[voice_memo_key] = ""
+
+render_audio_memo_recorder(project["id"], voice_memo_key)
+
+st.markdown("### 📝 音声メモ欄")
+st.caption(
+    "録音を確認したあと、文字起こし結果がこの欄へ自動入力されます。必要に応じて手入力で修正してから保存してください。"
+    "iPad/iPhoneでは入力欄をタップして標準キーボードのマイク入力も利用できます。"
+)
 
 voice_memo_text = st.text_area(
     voice_memo_label,
     value=st.session_state[voice_memo_key],
     height=150,
     key=voice_memo_key,
-    placeholder="録音内容を確認して、ここに手入力してください。将来の文字起こし結果もこの欄に保存できます。",
+    placeholder="録音内容の文字起こし結果がここに入ります。必要に応じて手入力で修正してください。",
     help="録音データの再生確認後、履歴として保存したいテキストを入力してください。",
 )
 
