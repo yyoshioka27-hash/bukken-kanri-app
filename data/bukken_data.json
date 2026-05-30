@@ -90,17 +90,6 @@
           "due_date": "2026-10-01",
           "attachment_path": "",
           "created_at": "2026-05-28 10:25"
-        },
-        {
-          "id": "f4ac5c41-b8fe-40c8-a812-1fb770405d9c",
-          "date": "2026-05-30",
-          "person": "音声メモ",
-          "content": "【音声メモ 2026-05-30 06:20】\nテスト",
-          "status": "対応中",
-          "priority": "中",
-          "due_date": "2026-05-30",
-          "attachment_path": "",
-          "created_at": "2026-05-30 06:20"
         }
       ],
       "structural_note": "20260514_既成杭で杭、基礎、基礎梁図面を作成→福田さんにメールした。",
