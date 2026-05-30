@@ -12,7 +12,6 @@ import requests
 from datetime import datetime, date
 from io import BytesIO
 from pathlib import Path
-import streamlit.components.v1 as components
 
 try:
     from streamlit_local_storage import LocalStorage
@@ -518,177 +517,78 @@ def save_structural_memo_pdf(project):
     return file_path, pdf_bytes
 
 
-def render_voice_recognition_controls(textarea_label, textarea_key):
-    """ブラウザの音声認識APIが使える場合だけ、既存テキスト欄へ文字起こしを追記する操作UIを表示する。"""
-    target_label = html.escape(textarea_label, quote=True)
-    target_key = html.escape(textarea_key, quote=True)
-    components.html(
-        f"""
-        <div id="voice-recognition-panel" style="border:1px solid #cfd8e3; border-radius:10px; padding:12px; background:#f8fbff; color:#111; font-family:sans-serif; transition:border-color .2s, box-shadow .2s, background .2s;">
-          <div style="font-weight:700; margin-bottom:8px;">🎙️ ブラウザ音声認識</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; align-items:center;">
-            <button id="start" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #4d94ff; background:#ffffff; color:#111; font-weight:700; min-width:104px;">録音開始</button>
-            <button id="stop" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #999; background:#ffffff; color:#111; font-weight:700; min-width:104px;" disabled>録音停止</button>
-            <span id="recording-badge" aria-live="polite" style="display:none; align-items:center; gap:6px; padding:6px 10px; border:2px solid #d60000; border-radius:999px; background:#fff1f1; color:#b00000; font-weight:800;">🔴 録音中です</span>
-          </div>
-          <div id="status" role="status" aria-live="polite" style="font-size:13px; line-height:1.5; padding:8px 10px; border-radius:8px; background:#ffffff; border:1px solid #e2e8f0;">ブラウザ音声認識が使えない場合も、下のテキスト入力欄を通常どおり使えます。</div>
-          <script>
-            const panelEl = document.getElementById('voice-recognition-panel');
-            const statusEl = document.getElementById('status');
-            const startButton = document.getElementById('start');
-            const stopButton = document.getElementById('stop');
-            const recordingBadge = document.getElementById('recording-badge');
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            let recognition = null;
-            let isRecording = false;
-            let receivedTranscript = false;
-            let stoppedByUser = false;
-            let errorHandled = false;
-
-            function findTextarea() {{
-              const doc = window.parent.document;
-              const byAria = doc.querySelector('textarea[aria-label="{target_label}"]');
-              if (byAria) return byAria;
-              const all = Array.from(doc.querySelectorAll('textarea'));
-              return all.find((el) => el.id && el.id.includes('{target_key}')) || all[all.length - 1] || null;
-            }}
-
-            function setStatus(message, tone = 'normal') {{
-              statusEl.textContent = message;
-              const colors = {{
-                normal: ['#ffffff', '#e2e8f0', '#111'],
-                recording: ['#fff1f1', '#d60000', '#b00000'],
-                success: ['#f0fff4', '#38a169', '#22543d'],
-                error: ['#fff5f5', '#e53e3e', '#9b2c2c']
-              }};
-              const [background, border, color] = colors[tone] || colors.normal;
-              statusEl.style.background = background;
-              statusEl.style.borderColor = border;
-              statusEl.style.color = color;
-            }}
-
-            function setRecordingUI(recording) {{
-              isRecording = recording;
-              if (recording) {{
-                panelEl.style.borderColor = '#d60000';
-                panelEl.style.boxShadow = '0 0 0 3px rgba(214, 0, 0, 0.16)';
-                panelEl.style.background = '#fff7f7';
-                recordingBadge.style.display = 'inline-flex';
-                startButton.textContent = '録音停止';
-                startButton.style.borderColor = '#d60000';
-                startButton.style.background = '#d60000';
-                startButton.style.color = '#ffffff';
-                stopButton.disabled = false;
-                setStatus('🔴 録音中です', 'recording');
-              }} else {{
-                panelEl.style.borderColor = '#cfd8e3';
-                panelEl.style.boxShadow = 'none';
-                panelEl.style.background = '#f8fbff';
-                recordingBadge.style.display = 'none';
-                startButton.textContent = '録音開始';
-                startButton.style.borderColor = '#4d94ff';
-                startButton.style.background = '#ffffff';
-                startButton.style.color = '#111';
-                stopButton.disabled = true;
-              }}
-            }}
-
-            function appendTranscript(text) {{
-              const textarea = findTextarea();
-              if (!textarea) {{
-                setStatus('音声認識結果を入力欄へ反映できませんでした。結果をコピーして貼り付けてください: ' + text, 'error');
-                return;
-              }}
-              const prefix = textarea.value && !textarea.value.endsWith('\n') ? '\n' : '';
-              textarea.value = textarea.value + prefix + text;
-              textarea.dispatchEvent(new Event('input', {{ bubbles: true }}));
-              textarea.dispatchEvent(new Event('change', {{ bubbles: true }}));
-              textarea.focus();
-              receivedTranscript = true;
-              setStatus('文字起こしを音声メモ欄に追加しました。必要に応じて編集してから保存してください。', 'success');
-            }}
-
-            function startRecording() {{
-              if (!recognition || isRecording) return;
-              receivedTranscript = false;
-              stoppedByUser = false;
-              errorHandled = false;
-              try {{
-                recognition.start();
-              }} catch (error) {{
-                if (error.name === 'InvalidStateError') {{
-                  setRecordingUI(true);
-                  return;
-                }}
-                setRecordingUI(false);
-                errorHandled = true;
-                setStatus('音声認識に失敗しました。もう一度録音してください', 'error');
-              }}
-            }}
-
-            function stopRecording() {{
-              if (!recognition || !isRecording) return;
-              stoppedByUser = true;
-              recognition.stop();
-            }}
-
-            if (!SpeechRecognition) {{
-              setStatus('このブラウザでは録音開始/停止による直接文字起こしは使えません。下のテキスト欄で、iPad/iPhone標準キーボードのマイク入力または手入力を使ってください。', 'error');
-              startButton.disabled = true;
-              stopButton.disabled = true;
-            }} else {{
-              recognition = new SpeechRecognition();
-              recognition.lang = 'ja-JP';
-              recognition.interimResults = false;
-              recognition.continuous = true;
-              recognition.onstart = () => {{
-                setRecordingUI(true);
-              }};
-              recognition.onerror = (event) => {{
-                setRecordingUI(false);
-                errorHandled = true;
-                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {{
-                  setStatus('ブラウザまたは端末のマイク使用許可を確認してください', 'error');
-                }} else {{
-                  setStatus('音声認識に失敗しました。もう一度録音してください', 'error');
-                }}
-              }};
-              recognition.onend = () => {{
-                const wasStoppedByUser = stoppedByUser;
-                const hadError = errorHandled;
-                setRecordingUI(false);
-                stoppedByUser = false;
-                errorHandled = false;
-                if (hadError) return;
-                if (wasStoppedByUser || receivedTranscript) {{
-                  setStatus('録音を停止しました', 'success');
-                }} else if (!receivedTranscript) {{
-                  setStatus('音声認識に失敗しました。もう一度録音してください', 'error');
-                }}
-              }};
-              recognition.onresult = (event) => {{
-                const text = Array.from(event.results)
-                  .slice(event.resultIndex)
-                  .map((result) => result[0].transcript)
-                  .join('')
-                  .trim();
-                if (text) appendTranscript(text);
-              }};
-            }}
-
-            startButton.addEventListener('click', () => {{
-              if (isRecording) {{
-                stopRecording();
-              }} else {{
-                startRecording();
-              }}
-            }});
-            stopButton.addEventListener('click', stopRecording);
-          </script>
-        </div>
-        """,
-        height=190,
+def render_audio_memo_recorder(project_id):
+    """ブラウザのマイク録音ウィジェットを表示し、録音データを再生確認できるようにする。"""
+    st.markdown("### 🎙️ 音声メモを録音")
+    st.caption(
+        "録音開始・停止は下のマイク録音ウィジェットで操作します。"
+        "表示されたマイクボタンを押し、ブラウザから求められた場合はマイク使用を許可してください。"
     )
+    st.info("マイクが反応しない場合は、ブラウザのマイク許可を確認してください。")
+
+    audio_state_key = f"voice_memo_audio_bytes_{project_id}"
+    audio_mime_key = f"voice_memo_audio_mime_{project_id}"
+    audio_name_key = f"voice_memo_audio_name_{project_id}"
+
+    if audio_state_key not in st.session_state:
+        st.session_state[audio_state_key] = None
+    if audio_mime_key not in st.session_state:
+        st.session_state[audio_mime_key] = "audio/wav"
+    if audio_name_key not in st.session_state:
+        st.session_state[audio_name_key] = ""
+
+    if not hasattr(st, "audio_input"):
+        st.error(
+            "このStreamlit環境では st.audio_input が利用できません。"
+            "ブラウザ録音を使うには Streamlit を最新版へ更新してください。"
+        )
+        st.code("pip install -U streamlit", language="bash")
+        return None
+
+    recorded_audio = st.audio_input(
+        "録音開始・停止",
+        key=f"voice_memo_audio_input_{project_id}",
+        help="クリックまたはタップして録音を開始し、もう一度操作して停止します。録音にはブラウザのマイク許可が必要です。",
+    )
+
+    if recorded_audio is not None:
+        audio_bytes = recorded_audio.getvalue()
+        if audio_bytes:
+            st.session_state[audio_state_key] = audio_bytes
+            st.session_state[audio_mime_key] = getattr(recorded_audio, "type", None) or "audio/wav"
+            st.session_state[audio_name_key] = getattr(recorded_audio, "name", "") or "recorded_audio.wav"
+            st.success("録音データを取得しました。下のプレーヤーで再生確認できます。")
+        else:
+            st.session_state[audio_state_key] = None
+            st.error(
+                "録音データを取得できませんでした。もう一度録音してください。"
+                "ブラウザのマイク許可を確認してください。"
+            )
+
+    audio_bytes = st.session_state.get(audio_state_key)
+    if audio_bytes:
+        st.audio(audio_bytes, format=st.session_state.get(audio_mime_key, "audio/wav"))
+        st.caption(
+            f"取得済み音声: {len(audio_bytes):,} bytes"
+            f" / {st.session_state.get(audio_mime_key, 'audio/wav')}"
+        )
+    else:
+        st.warning(
+            "まだ録音データを取得できていません。上の『録音開始・停止』で録音してください。"
+            "反応しない場合は、ブラウザのマイク許可を確認してください。"
+        )
+
+    if st.button("録音データを確認", key=f"check_voice_audio_{project_id}"):
+        if st.session_state.get(audio_state_key):
+            st.success("録音データを取得済みです。st.audio のプレーヤーで再生確認できます。")
+        else:
+            st.error(
+                "録音データを取得できませんでした。録音開始・停止を実行し、"
+                "ブラウザのマイク許可を確認してください。"
+            )
+
+    return audio_bytes
+
 
 def save_structural_memo_text(project):
     """構造設計メモtxtを保存し、保存パスと本文を返す。"""
@@ -1705,24 +1605,31 @@ st.divider()
 
 st.subheader("🎙️ 音声メモ")
 st.caption(
-    "音声ファイルは保存せず、入力・文字起こしされたテキストだけを保存します。"
-    "iPad/iPhoneでは下の入力欄をタップして、標準キーボードのマイク入力も利用できます。"
+    "ブラウザのマイクから録音し、録音後は st.audio のプレーヤーで再生確認できます。"
+    "現時点では音声ファイル自体はJSONへ保存せず、下の音声メモ欄に手入力した内容、または将来の文字起こし結果を履歴として保存する構成です。"
+)
+
+render_audio_memo_recorder(project["id"])
+
+st.markdown("### 📝 音声メモ欄")
+st.caption(
+    "録音を確認したあと、内容を手入力してください。"
+    "将来、文字起こしを追加する場合もこの欄に反映してから保存できます。"
+    "iPad/iPhoneでは入力欄をタップして標準キーボードのマイク入力も利用できます。"
 )
 
 voice_memo_key = f"voice_memo_text_{project['id']}"
-voice_memo_label = "音声メモ（テキスト）"
+voice_memo_label = "音声メモ（手入力・将来の文字起こし用）"
 if voice_memo_key not in st.session_state:
     st.session_state[voice_memo_key] = ""
-
-render_voice_recognition_controls(voice_memo_label, voice_memo_key)
 
 voice_memo_text = st.text_area(
     voice_memo_label,
     value=st.session_state[voice_memo_key],
     height=150,
     key=voice_memo_key,
-    placeholder="ここに音声入力または手入力したメモが表示されます。保存前に自由に編集できます。",
-    help="ブラウザ音声認識が使えない場合も通常のテキスト入力欄として利用できます。",
+    placeholder="録音内容を確認して、ここに手入力してください。将来の文字起こし結果もこの欄に保存できます。",
+    help="録音データの再生確認後、履歴として保存したいテキストを入力してください。",
 )
 
 vm_col1, vm_col2 = st.columns([1, 3])
