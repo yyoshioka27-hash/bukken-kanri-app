@@ -9,6 +9,7 @@ import uuid
 import html
 import urllib.parse
 import base64
+import unicodedata
 import requests
 from faster_whisper import WhisperModel
 from datetime import datetime, date
@@ -654,6 +655,60 @@ def save_structural_memo_text(project):
 
     return file_path, memo_text
 
+
+
+def normalize_text(value):
+    """検索用に値を文字列化し、大小文字・全角半角・カナ差分をできるだけ吸収する。"""
+    if value is None:
+        return ""
+
+    text = unicodedata.normalize("NFKC", str(value)).strip().casefold()
+    # カタカナをひらがなに寄せ、ひらがな・カタカナの違いも簡易的に吸収する。
+    text = "".join(
+        chr(ord(char) - 0x60) if "ァ" <= char <= "ヶ" else char
+        for char in text
+    )
+    return text
+
+
+def flatten_project_text(project):
+    """物件データ内の文字列・数値・日付などを再帰的に集約して検索用テキストを作る。"""
+    parts = []
+
+    def collect(value):
+        if value is None:
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                parts.append(normalize_text(key))
+                collect(child)
+            return
+        if isinstance(value, (list, tuple, set)):
+            for child in value:
+                collect(child)
+            return
+        parts.append(normalize_text(value))
+
+    collect(project)
+    return " ".join(part for part in parts if part)
+
+
+def match_keywords(project, query):
+    """複数キーワードを空白区切りで分割し、すべて含む物件だけTrueにする。"""
+    normalized_query = normalize_text(query)
+    keywords = [keyword for keyword in normalized_query.split() if keyword]
+    if not keywords:
+        return True
+
+    project_text = flatten_project_text(project)
+    return all(keyword in project_text for keyword in keywords)
+
+
+def filter_projects_by_keyword(projects, query):
+    """元データを書き換えず、検索条件に一致する物件リストだけを返す。"""
+    if not normalize_text(query):
+        return list(projects)
+    return [project for project in projects if match_keywords(project, query)]
 
 def get_project(data, project_id):
     for p in data["projects"]:
@@ -1527,7 +1582,11 @@ st.markdown(
 calendar_url = "https://calendar.google.com/"
 
 st.title("📁 物件管理アプリ")
-header_col1, header_col2 = st.columns([1, 1])
+
+if "project_keyword_search" not in st.session_state:
+    st.session_state["project_keyword_search"] = ""
+
+header_col1, header_col2, header_col3 = st.columns([1, 1, 2])
 with header_col1:
     if st.button("📅 カレンダー", key="show_google_calendar_link", use_container_width=True):
         notify_action_start("カレンダーを開く準備をしています")
@@ -1541,6 +1600,13 @@ with header_col2:
         st.session_state["page_mode"] = "schedule"
         queue_feedback("success", "スケジュール一覧を表示しました")
         st.rerun()
+with header_col3:
+    st.text_input(
+        "キーワード検索",
+        key="project_keyword_search",
+        placeholder="物件名・メモ・やり取り・状態・重要度・期限から検索",
+        help="空白区切りで複数キーワードを入力すると、すべてを含む物件だけを表示します。",
+    )
 
 
 if "selected_project_id" not in st.session_state:
@@ -1577,6 +1643,11 @@ if "data" not in st.session_state:
 data = st.session_state["data"]
 show_queued_feedback()
 
+keyword_search_query = st.session_state.get("project_keyword_search", "")
+if data.get("projects"):
+    keyword_result_count = len(filter_projects_by_keyword(data["projects"], keyword_search_query))
+    st.caption(f"検索結果：{keyword_result_count}件")
+
 
 def render_project_management_panel(panel_prefix="sidebar"):
     # 上部：日常利用の中心（一覧・フィルタ・選択）
@@ -1587,10 +1658,14 @@ def render_project_management_panel(panel_prefix="sidebar"):
         radio_key = "filter_mode" if panel_prefix == "sidebar" else f"{panel_prefix}_filter_mode"
         default_index = ["すべて", "未対応あり", "重要度高あり"].index(st.session_state.get("filter_mode", "すべて"))
         filter_mode = st.radio("表示", ["すべて", "未対応あり", "重要度高あり"], index=default_index, key=radio_key)
+        if panel_prefix == "sidebar":
+            st.session_state["filter_mode"] = filter_mode
         save_app_state()
-        st.caption("物件選択一覧")
 
-        for p in data["projects"]:
+        keyword_query = st.session_state.get("project_keyword_search", "")
+        keyword_matched_projects = filter_projects_by_keyword(data["projects"], keyword_query)
+        visible_projects = []
+        for p in keyword_matched_projects:
             open_count = count_open_logs(p)
             high_count = count_high_logs(p)
 
@@ -1600,6 +1675,17 @@ def render_project_management_panel(panel_prefix="sidebar"):
             if filter_mode == "重要度高あり" and high_count == 0:
                 continue
 
+            visible_projects.append(p)
+
+        st.caption(f"検索結果：{len(visible_projects)}件")
+        st.caption("物件選択一覧")
+
+        if not visible_projects:
+            st.info("検索条件に一致する物件はありません。検索欄を空にすると全件表示に戻ります。")
+
+        for p in visible_projects:
+            open_count = count_open_logs(p)
+            high_count = count_high_logs(p)
             label = f"{p.get('name', '')}｜未{open_count}｜高{high_count}"
 
             if st.button(label, key=f"{panel_prefix}_select_{p['id']}", use_container_width=True):
