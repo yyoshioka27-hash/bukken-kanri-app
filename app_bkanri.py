@@ -34,6 +34,34 @@ APP_STATE_STORAGE_KEY = "bukken_kanri_app_state_v1"
 APP_SETTINGS_FILE = Path(__file__).resolve().parent / "app_settings.json"
 
 
+def notify_action_start(message="処理を開始しました"):
+    st.toast(message)
+
+
+def queue_feedback(kind, message):
+    st.session_state.setdefault("_feedback_messages", []).append({"kind": kind, "message": message})
+
+
+def show_queued_feedback():
+    for feedback in st.session_state.pop("_feedback_messages", []):
+        message = feedback.get("message", "")
+        kind = feedback.get("kind", "info")
+        if message:
+            st.toast(message)
+        if kind == "success":
+            st.success(message)
+        elif kind == "error":
+            st.error(message)
+        elif kind == "warning":
+            st.warning(message)
+        elif message:
+            st.info(message)
+
+
+def notify_download_start(message):
+    st.toast(message)
+
+
 def get_local_storage_data():
     if LocalStorage is None:
         return None
@@ -575,6 +603,7 @@ def render_audio_memo_recorder(project_id, voice_memo_key=None):
         st.code("pip install -U streamlit", language="bash")
         return None
 
+    st.info("🎙 マイクボタンを押すと録音を開始します。停止後は文字起こしできます。")
     recorded_audio = st.audio_input(
         "録音開始・停止",
         key=f"voice_memo_audio_input_{project_id}",
@@ -586,14 +615,17 @@ def render_audio_memo_recorder(project_id, voice_memo_key=None):
             st.session_state[audio_state_key] = audio_bytes
             st.session_state[audio_mime_key] = getattr(recorded_audio, "type", None) or "audio/wav"
             st.session_state[audio_name_key] = getattr(recorded_audio, "name", "") or "recorded_audio.wav"
+            st.toast("録音を停止しました")
+            st.success("録音データを受け取りました。文字起こしできます。")
         else:
             st.session_state[audio_state_key] = None
             st.error("文字起こしに失敗しました。マイク許可または録音データを確認してください")
 
     audio_bytes = st.session_state.get(audio_state_key)
     if audio_bytes and st.button("文字起こしする", key=f"transcribe_voice_audio_{project_id}", type="primary"):
+        notify_action_start("文字起こし中です...")
         try:
-            with st.spinner("文字起こし中です…"):
+            with st.spinner("文字起こし中です..."):
                 transcript = transcribe_audio_bytes(audio_bytes)
 
             if not transcript:
@@ -601,6 +633,8 @@ def render_audio_memo_recorder(project_id, voice_memo_key=None):
             elif voice_memo_key:
                 current_text = st.session_state.get(voice_memo_key, "")
                 st.session_state[voice_memo_key] = append_voice_memo_text(current_text, transcript)
+                st.toast("文字起こしが完了しました")
+                st.success("文字起こしが完了しました")
         except Exception:
             st.error("文字起こしに失敗しました。マイク許可または録音データを確認してください")
 
@@ -1290,7 +1324,7 @@ st.markdown(
     }
 
     [data-testid="stAudioInput"]:has([data-testid="stAudioInputActionButton"][aria-label="Stop recording"])::after {
-        content: "🔴 録音中...";
+        content: "🔴 録音を開始しました / 録音中...";
         display: inline-flex;
         align-items: center;
         margin-top: 8px;
@@ -1323,6 +1357,30 @@ st.markdown(
     [data-baseweb="popover"] {
         background-color: #ffffff !important;
         color: #111111 !important;
+    }
+
+
+    /* toast / status messages: force readable light colors on iPhone, iPad, and PC */
+    [data-testid="stToast"],
+    [data-testid="stToast"] *,
+    [data-testid="stAlert"],
+    [data-testid="stAlert"] * {
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+    }
+
+    [data-testid="stToast"],
+    [data-testid="stToast"] > div,
+    [data-testid="stAlert"] {
+        background-color: #ffffff !important;
+        border-color: #d1d5db !important;
+        color-scheme: light !important;
+    }
+
+    [data-testid="stSpinner"],
+    [data-testid="stSpinner"] * {
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
     }
 
     @media screen and (max-width: 1024px) {
@@ -1390,10 +1448,17 @@ calendar_url = "https://calendar.google.com/"
 st.title("📁 物件管理アプリ")
 header_col1, header_col2 = st.columns([1, 1])
 with header_col1:
-    st.link_button("📅 カレンダー", calendar_url, use_container_width=True)
+    if st.button("📅 カレンダー", key="show_google_calendar_link", use_container_width=True):
+        notify_action_start("カレンダーを開く準備をしています")
+        st.session_state["show_google_calendar_link"] = True
+        st.toast("カレンダーを開くリンクを表示しました")
+    if st.session_state.get("show_google_calendar_link"):
+        st.link_button("Googleカレンダーを開く", calendar_url, use_container_width=True)
 with header_col2:
     if st.button("📅 スケジュール", key="show_schedule_list", use_container_width=True):
+        notify_action_start("スケジュール一覧を表示します")
         st.session_state["page_mode"] = "schedule"
+        queue_feedback("success", "スケジュール一覧を表示しました")
         st.rerun()
 
 
@@ -1429,6 +1494,7 @@ if "data" not in st.session_state:
         st.session_state["data"] = {"projects": []}
 
 data = st.session_state["data"]
+show_queued_feedback()
 
 
 def render_project_management_panel(panel_prefix="sidebar"):
@@ -1456,8 +1522,10 @@ def render_project_management_panel(panel_prefix="sidebar"):
             label = f"{p.get('name', '')}｜未{open_count}｜高{high_count}"
 
             if st.button(label, key=f"{panel_prefix}_select_{p['id']}", use_container_width=True):
+                notify_action_start("物件を選択しています")
                 st.session_state["selected_project_id"] = p["id"]
                 save_app_state()
+                queue_feedback("success", "物件を選択しました")
                 st.rerun()
 
     else:
@@ -1490,28 +1558,32 @@ def render_project_management_panel(panel_prefix="sidebar"):
         submitted = st.form_submit_button("物件を追加")
 
         if submitted:
+            notify_action_start("物件追加を開始しました")
             if not name.strip():
-                st.warning("物件名を入力してください。")
+                st.error("物件追加に失敗しました。物件名を入力してください。")
             else:
-                new_project = {
-                    "id": str(uuid.uuid4()),
-                    "name": name.strip(),
-                    "client": client.strip(),
-                    "folder_path": st.session_state["folder_path_temp"].strip(),
-                    "schedule_pdf_path": st.session_state["pdf_path_temp"].strip(),
-                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "logs": [],
-                }
+                try:
+                    with st.spinner("物件を追加中です..."):
+                        new_project = {
+                            "id": str(uuid.uuid4()),
+                            "name": name.strip(),
+                            "client": client.strip(),
+                            "folder_path": st.session_state["folder_path_temp"].strip(),
+                            "schedule_pdf_path": st.session_state["pdf_path_temp"].strip(),
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "logs": [],
+                        }
+                        data["projects"].append(new_project)
+                        persist_data(data)
 
-                data["projects"].append(new_project)
-                persist_data(data)
+                        st.session_state["selected_project_id"] = new_project["id"]
+                        st.session_state["folder_path_temp"] = ""
+                        st.session_state["pdf_path_temp"] = ""
 
-                st.session_state["selected_project_id"] = new_project["id"]
-                st.session_state["folder_path_temp"] = ""
-                st.session_state["pdf_path_temp"] = ""
-
-                st.success("物件を追加しました。")
-                st.rerun()
+                    queue_feedback("success", "物件を追加しました。")
+                    st.rerun()
+                except Exception:
+                    st.error("物件追加に失敗しました。もう一度確認してください。")
 
     st.divider()
 
@@ -1523,7 +1595,9 @@ def render_project_management_panel(panel_prefix="sidebar"):
 
     if st.session_state.get("app_settings") is not None:
         if st.button("保存先を変更", key=f"{panel_prefix}_change_storage", use_container_width=True):
+            notify_action_start("保存先設定を開きます")
             st.session_state["show_storage_selector"] = True
+            st.toast("保存先設定を表示しました")
 
     if st.session_state.get("show_storage_selector", False):
         with st.form(f"{panel_prefix}_storage_settings_form"):
@@ -1533,15 +1607,20 @@ def render_project_management_panel(panel_prefix="sidebar"):
                 help="例: C:\\構造設計メモ管理データ\\bukken_data.json または C:\\構造設計メモ管理データ",
             )
             if st.form_submit_button("保存先を確定", use_container_width=True):
+                notify_action_start("保存先の設定を開始しました")
                 resolved = resolve_data_file_path(storage_path)
                 if resolved is None:
-                    st.error("保存先を入力してください。")
+                    st.error("保存先設定に失敗しました。保存先を入力してください。")
                 else:
-                    save_app_settings(str(resolved))
-                    st.session_state["show_storage_selector"] = False
-                    st.session_state["data"] = load_initial_data()
-                    st.success("保存先を保存しました。次回起動時も自動で読み込みます。")
-                    st.rerun()
+                    try:
+                        with st.spinner("保存先を設定中です..."):
+                            save_app_settings(str(resolved))
+                            st.session_state["show_storage_selector"] = False
+                            st.session_state["data"] = load_initial_data()
+                        queue_feedback("success", "保存先を保存しました。次回起動時も自動で読み込みます。")
+                        st.rerun()
+                    except Exception:
+                        st.error("保存先設定に失敗しました。パスを確認してください。")
 
     st.divider()
 
@@ -1554,28 +1633,30 @@ def render_project_management_panel(panel_prefix="sidebar"):
         help="bukken_data.json を選択してください。",
     )
     if st.button("JSON読込", key=f"{panel_prefix}_json_load", use_container_width=True):
+        notify_action_start("JSON読み込みを開始しました")
         if uploaded_json is None:
-            st.warning("先にJSONファイルを選択してください。")
+            st.error("JSONの読み込みに失敗しました。先にJSONファイルを選択してください。")
         else:
             try:
-                raw_json = uploaded_json.getvalue()
-                try:
-                    uploaded_data = json.loads(raw_json.decode("utf-8"))
-                except UnicodeDecodeError:
-                    uploaded_data = json.loads(raw_json.decode("utf-8-sig"))
+                with st.spinner("JSONを読み込み中です..."):
+                    raw_json = uploaded_json.getvalue()
+                    try:
+                        uploaded_data = json.loads(raw_json.decode("utf-8"))
+                    except UnicodeDecodeError:
+                        uploaded_data = json.loads(raw_json.decode("utf-8-sig"))
 
-                st.session_state["data"] = normalize_data(uploaded_data)
-                if st.session_state["data"]["projects"]:
-                    st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
-                else:
-                    st.session_state["selected_project_id"] = None
+                    st.session_state["data"] = normalize_data(uploaded_data)
+                    if st.session_state["data"]["projects"]:
+                        st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
+                    else:
+                        st.session_state["selected_project_id"] = None
 
-                # 読込直後に保存済みJSONとして即時登録（JOINボタン不要）
-                save_data(st.session_state["data"])
-                save_local_storage_data(st.session_state["data"])
-                save_app_state()
+                    # 読込直後に保存済みJSONとして即時登録（JOINボタン不要）
+                    save_data(st.session_state["data"])
+                    save_local_storage_data(st.session_state["data"])
+                    save_app_state()
 
-                st.success("JSONを読み込み、保存済みJSONとして登録しました。次回起動時は自動復元されます。")
+                queue_feedback("success", "JSONを読み込み、保存済みJSONとして登録しました。次回起動時は自動復元されます。")
                 st.rerun()
             except Exception:
                 st.error("JSONの読み込みに失敗しました。形式を確認してください。")
@@ -1587,6 +1668,8 @@ def render_project_management_panel(panel_prefix="sidebar"):
         mime="application/json",
         use_container_width=True,
         key=f"{panel_prefix}_json_save",
+        on_click=notify_download_start,
+        args=("JSON保存を開始しました",),
     )
 
 
@@ -1600,11 +1683,15 @@ st.markdown('<div class="mobile-toggle-bar">', unsafe_allow_html=True)
 mv1, mv2 = st.columns(2)
 with mv1:
     if st.button("物件一覧", key="mobile_show_list", use_container_width=True):
+        notify_action_start("物件一覧を表示します")
         st.session_state["mobile_view"] = "list"
+        queue_feedback("success", "物件一覧を表示しました")
         st.rerun()
 with mv2:
     if st.button("物件詳細", key="mobile_show_detail", use_container_width=True):
+        notify_action_start("物件詳細を表示します")
         st.session_state["mobile_view"] = "detail"
+        queue_feedback("success", "物件詳細を表示しました")
         st.rerun()
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1619,7 +1706,9 @@ if st.session_state.get("page_mode") == "schedule":
     schedule_logs = get_schedule_logs(data)
 
     if st.button("← 物件詳細に戻る", key="back_to_main_from_schedule"):
+        notify_action_start("物件詳細に戻ります")
         st.session_state["page_mode"] = "main"
+        queue_feedback("success", "物件詳細を表示しました")
         st.rerun()
 
     if not schedule_logs:
@@ -1686,13 +1775,19 @@ with col2:
     st.write("")
     st.write("")
     if st.button("📄 工程表PDFを開く", key=f"open_schedule_pdf_{project['id']}"):
-        open_path(project.get("schedule_pdf_path", ""))
+        notify_action_start("工程表PDFを開いています")
+        with st.spinner("工程表PDFを確認中です..."):
+            open_path(project.get("schedule_pdf_path", ""))
+        st.toast("工程表PDFを開く処理が完了しました")
 
 with col3:
     st.write("")
     st.write("")
     if st.button("📂 物件フォルダを開く", key=f"open_project_folder_{project['id']}"):
-        open_path(project.get("folder_path", ""))
+        notify_action_start("物件フォルダを開いています")
+        with st.spinner("物件フォルダを確認中です..."):
+            open_path(project.get("folder_path", ""))
+        st.toast("物件フォルダを開く処理が完了しました")
 
 with col4:
     st.write("")
@@ -1706,6 +1801,8 @@ with col4:
         mime="text/plain",
         key=f"download_history_text_{project['id']}",
         use_container_width=True,
+        on_click=notify_download_start,
+        args=("履歴txt出力を開始しました",),
     )
 
     history_pdf_bytes = build_structural_memo_pdf(project)
@@ -1716,10 +1813,14 @@ with col4:
         mime="application/pdf",
         key=f"download_history_pdf_{project['id']}",
         use_container_width=True,
+        on_click=notify_download_start,
+        args=("履歴PDF出力を開始しました",),
     )
 
     if st.button("📝 構造設計メモ", key=f"open_structural_memo_{project['id']}", use_container_width=True):
+        notify_action_start("構造設計メモの表示を切り替えます")
         st.session_state["show_structural_memo_editor"] = not st.session_state["show_structural_memo_editor"]
+        st.toast("構造設計メモの表示を切り替えました")
 
 
 if st.session_state["show_structural_memo_editor"]:
@@ -1749,11 +1850,16 @@ if st.session_state["show_structural_memo_editor"]:
 
     with memo_col1:
         if st.button("💾 メモを保存", key=f"save_structural_memo_body_{project['id']}"):
-            project["structural_memo"] = structural_memo_text
-            project["structural_memo_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            persist_data(data)
-            st.success("構造設計メモを保存しました。")
-            st.rerun()
+            notify_action_start("構造設計メモの保存を開始しました")
+            try:
+                with st.spinner("構造設計メモを保存中です..."):
+                    project["structural_memo"] = structural_memo_text
+                    project["structural_memo_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    persist_data(data)
+                queue_feedback("success", "構造設計メモを保存しました。")
+                st.rerun()
+            except Exception:
+                st.error("構造設計メモの保存に失敗しました。もう一度確認してください。")
 
     with memo_col2:
         structural_memo_a4_text = f"""構造設計メモ
@@ -1772,6 +1878,8 @@ if st.session_state["show_structural_memo_editor"]:
             file_name=f"{safe_project_name}_構造設計メモ.txt",
             mime="text/plain",
             key=f"download_structural_memo_body_{project['id']}",
+            on_click=notify_download_start,
+            args=("メモtxt出力を開始しました",),
         )
 
     st.divider()
@@ -1796,26 +1904,31 @@ voice_memo_text = st.text_area(
 )
 
 if st.button("音声メモを履歴に追加", key=f"add_voice_memo_{project['id']}", type="primary"):
+    notify_action_start("音声メモの追加を開始しました")
     if not voice_memo_text.strip():
-        st.warning("音声メモのテキストを入力してください。")
+        st.error("音声メモの追加に失敗しました。テキストを入力してください。")
     else:
-        now_text = datetime.now().strftime("%Y-%m-%d %H:%M")
-        project["logs"].append(
-            {
-                "id": str(uuid.uuid4()),
-                "date": str(date.today()),
-                "person": "音声メモ",
-                "content": f"【音声メモ {now_text}】\n{voice_memo_text.strip()}",
-                "status": "対応中",
-                "priority": "中",
-                "due_date": str(date.today()),
-                "attachment_path": "",
-                "created_at": now_text,
-            }
-        )
-        persist_data(data)
-        st.success("音声メモを日時付きで履歴に追加しました。")
-        st.rerun()
+        try:
+            with st.spinner("音声メモを履歴に追加中です..."):
+                now_text = datetime.now().strftime("%Y-%m-%d %H:%M")
+                project["logs"].append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "date": str(date.today()),
+                        "person": "音声メモ",
+                        "content": f"【音声メモ {now_text}】\n{voice_memo_text.strip()}",
+                        "status": "対応中",
+                        "priority": "中",
+                        "due_date": str(date.today()),
+                        "attachment_path": "",
+                        "created_at": now_text,
+                    }
+                )
+                persist_data(data)
+            queue_feedback("success", "音声メモを日時付きで履歴に追加しました。")
+            st.rerun()
+        except Exception:
+            st.error("音声メモの追加に失敗しました。もう一度確認してください。")
 
 st.divider()
 
@@ -1901,65 +2014,93 @@ else:
 
             with bc1:
                 if st.button("💾保存", key=f"edit_save_{log['id']}"):
-                    log["date"] = str(edit_date)
-                    log["status"] = edit_status
-                    log["priority"] = edit_priority
-                    log["due_date"] = str(edit_due)
-                    log["person"] = edit_person.strip()
-                    log["content"] = edit_content.strip()
-                    log["attachment_path"] = edit_attach.strip()
+                    notify_action_start("修正内容の保存を開始しました")
+                    try:
+                        with st.spinner("修正内容を保存中です..."):
+                            log["date"] = str(edit_date)
+                            log["status"] = edit_status
+                            log["priority"] = edit_priority
+                            log["due_date"] = str(edit_due)
+                            log["person"] = edit_person.strip()
+                            log["content"] = edit_content.strip()
+                            log["attachment_path"] = edit_attach.strip()
+                            persist_data(data)
+                            st.session_state["editing_log_id"] = None
 
-                    persist_data(data)
-
-                    st.session_state["editing_log_id"] = None
-
-                    st.success("修正を保存しました。")
-                    st.rerun()
+                        queue_feedback("success", "修正を保存しました。")
+                        st.rerun()
+                    except Exception:
+                        st.error("修正の保存に失敗しました。もう一度確認してください。")
 
             with bc2:
                 if st.button("❌取消", key=f"cancel_edit_{log['id']}"):
+                    notify_action_start("編集を取り消します")
                     st.session_state["editing_log_id"] = None
+                    queue_feedback("success", "編集を取り消しました")
                     st.rerun()
 
             with bc3:
                 if st.button("📎開く", key=f"open_edit_attach_{log['id']}"):
-                    open_path(edit_attach)
+                    notify_action_start("添付ファイルを開いています")
+                    with st.spinner("添付ファイルを確認中です..."):
+                        open_path(edit_attach)
+                    st.toast("添付ファイルを開く処理が完了しました")
 
         else:
             c1, c2, c3, c4, c5, c6 = st.columns([1, 1, 1, 1, 1, 4])
 
             with c1:
                 if st.button("✏編集", key=f"edit_{log['id']}"):
+                    notify_action_start("編集画面を表示します")
                     st.session_state["editing_log_id"] = log["id"]
+                    queue_feedback("success", "編集画面を表示しました")
                     st.rerun()
 
             with c2:
                 if st.button("✔保存", key=f"save_{log['id']}"):
-                    persist_data(data)
-                    st.success("保存しました。")
-                    st.rerun()
+                    notify_action_start("保存を開始しました")
+                    try:
+                        with st.spinner("保存中です..."):
+                            persist_data(data)
+                        queue_feedback("success", "保存しました。")
+                        st.rerun()
+                    except Exception:
+                        st.error("保存に失敗しました。もう一度確認してください。")
 
             with c3:
                 if st.button("🗑削除", key=f"delete_{log['id']}"):
-                    project["logs"] = [
-                        x for x in project["logs"] if x["id"] != log["id"]
-                    ]
-                    persist_data(data)
-                    st.warning("削除しました。")
-                    st.rerun()
+                    notify_action_start("削除を開始しました")
+                    try:
+                        with st.spinner("削除中です..."):
+                            project["logs"] = [
+                                x for x in project["logs"] if x["id"] != log["id"]
+                            ]
+                            persist_data(data)
+                        queue_feedback("warning", "物件を削除しました")
+                        st.rerun()
+                    except Exception:
+                        st.error("削除に失敗しました。もう一度確認してください。")
 
             with c4:
                 if attach_path:
                     if st.button("📎添付", key=f"open_attach_{log['id']}"):
-                        open_path(attach_path)
+                        notify_action_start("添付ファイルを開いています")
+                        with st.spinner("添付ファイルを確認中です..."):
+                            open_path(attach_path)
+                        st.toast("添付ファイルを開く処理が完了しました")
 
             with c5:
                 calendar_url = build_google_calendar_url(project, log)
-                st.link_button(
-                    "📅予定登録",
-                    calendar_url,
-                    use_container_width=True,
-                )
+                if st.button("📅予定登録", key=f"show_calendar_link_{log['id']}", use_container_width=True):
+                    notify_action_start("カレンダー予定登録を開始しました")
+                    st.session_state[f"show_calendar_link_{log['id']}"] = True
+                    st.toast("カレンダー予定登録リンクを表示しました")
+                if st.session_state.get(f"show_calendar_link_{log['id']}"):
+                    st.link_button(
+                        "Googleカレンダーで予定を作成",
+                        calendar_url,
+                        use_container_width=True,
+                    )
 
         st.divider()
 
@@ -1991,30 +2132,32 @@ with st.form("add_log_form"):
     add_log = st.form_submit_button("やり取りを追加")
 
     if add_log:
+        notify_action_start("やり取り追加を開始しました")
         if not content.strip():
-            st.warning("内容を入力してください。")
+            st.error("やり取り追加に失敗しました。内容を入力してください。")
         else:
-            project["logs"].append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "date": str(log_date),
-                    "person": person.strip(),
-                    "content": content.strip(),
-                    "status": status,
-                    "priority": priority,
-                    "due_date": str(due_date),
-                    "attachment_path": st.session_state["new_attachment_path"].strip(),
-                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                }
-            )
+            try:
+                with st.spinner("やり取りを追加中です..."):
+                    project["logs"].append(
+                        {
+                            "id": str(uuid.uuid4()),
+                            "date": str(log_date),
+                            "person": person.strip(),
+                            "content": content.strip(),
+                            "status": status,
+                            "priority": priority,
+                            "due_date": str(due_date),
+                            "attachment_path": st.session_state["new_attachment_path"].strip(),
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        }
+                    )
+                    persist_data(data)
+                    st.session_state["new_attachment_path"] = ""
 
-            persist_data(data)
-
-            st.session_state["new_attachment_path"] = ""
-
-            st.success("やり取りを追加しました。")
-            st.rerun()
-
+                queue_feedback("success", "やり取りを追加しました。")
+                st.rerun()
+            except Exception:
+                st.error("やり取り追加に失敗しました。もう一度確認してください。")
 
 st.divider()
 
@@ -2024,8 +2167,15 @@ uploaded_file = st.file_uploader("要約したいPDFまたはtxtをドロップ"
 
 if uploaded_file:
     if st.button("要約する"):
-        text = read_uploaded_text(uploaded_file)
-        st.session_state["summary_result"] = simple_summary(text)
+        notify_action_start("ファイル要約を開始しました")
+        try:
+            with st.spinner("ファイルを要約中です..."):
+                text = read_uploaded_text(uploaded_file)
+                st.session_state["summary_result"] = simple_summary(text)
+            st.toast("ファイル要約が完了しました")
+            st.success("ファイル要約が完了しました")
+        except Exception:
+            st.error("ファイル要約に失敗しました。ファイル形式を確認してください。")
 
 if "summary_result" in st.session_state:
     st.text_area(
@@ -2046,11 +2196,16 @@ with st.expander("物件名・相手先を編集"):
         update_project = st.form_submit_button("物件名・相手先を保存")
 
         if update_project:
-            project["name"] = edit_name.strip()
-            project["client"] = edit_client.strip()
-            persist_data(data)
-            st.success("物件情報を保存しました。")
-            st.rerun()
+            notify_action_start("物件情報の保存を開始しました")
+            try:
+                with st.spinner("物件情報を保存中です..."):
+                    project["name"] = edit_name.strip()
+                    project["client"] = edit_client.strip()
+                    persist_data(data)
+                queue_feedback("success", "物件情報を保存しました")
+                st.rerun()
+            except Exception:
+                st.error("物件情報の保存に失敗しました。もう一度確認してください。")
 
 
 st.divider()
@@ -2074,19 +2229,30 @@ with st.expander("🔗 現在の物件のパス設定"):
 
     with save_col:
         if st.button("💾 現在の物件にパスを保存", type="primary"):
-            project["folder_path"] = st.session_state[current_folder_key].strip()
-            project["schedule_pdf_path"] = st.session_state[current_pdf_key].strip()
-            persist_data(data)
-            st.success("現在の物件にパスを保存しました。")
-            st.rerun()
+            notify_action_start("パス設定の保存を開始しました")
+            try:
+                with st.spinner("パス設定を保存中です..."):
+                    project["folder_path"] = st.session_state[current_folder_key].strip()
+                    project["schedule_pdf_path"] = st.session_state[current_pdf_key].strip()
+                    persist_data(data)
+                queue_feedback("success", "現在の物件にパスを保存しました。")
+                st.rerun()
+            except Exception:
+                st.error("パス設定の保存に失敗しました。もう一度確認してください。")
 
     with open_folder_col:
         if st.button("📂 このフォルダを開く"):
-            open_path(st.session_state[current_folder_key])
+            notify_action_start("フォルダを開いています")
+            with st.spinner("フォルダを確認中です..."):
+                open_path(st.session_state[current_folder_key])
+            st.toast("フォルダを開く処理が完了しました")
 
     with open_pdf_col:
         if st.button("📄 このPDFを開く"):
-            open_path(st.session_state[current_pdf_key])
+            notify_action_start("PDFを開いています")
+            with st.spinner("PDFを確認中です..."):
+                open_path(st.session_state[current_pdf_key])
+            st.toast("PDFを開く処理が完了しました")
 
 
 # END
