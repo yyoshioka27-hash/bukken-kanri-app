@@ -1003,6 +1003,67 @@ st.markdown(
         line-height: 1.4 !important;
     }
 
+    /* Streamlit全体の主要ボタンに、物理ボタンのような押下感を付与 */
+    .stButton button,
+    .stDownloadButton button,
+    [data-testid="stFormSubmitButton"] button,
+    [data-testid="stLinkButton"] a,
+    button[kind="primary"],
+    button[kind="secondary"],
+    button[data-testid^="baseButton"],
+    a[data-testid^="baseLinkButton"] {
+        transform: translateY(0) scale(1) !important;
+        transform-origin: center center !important;
+        transition: transform 0.09s ease-out, box-shadow 0.09s ease-out, background-color 0.09s ease-out, filter 0.09s ease-out, border-color 0.09s ease-out !important;
+        box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.10) !important;
+        cursor: pointer !important;
+        touch-action: manipulation !important;
+        -webkit-tap-highlight-color: transparent !important;
+        will-change: transform, box-shadow, background-color, filter !important;
+    }
+
+    .stButton button:active:not(:disabled),
+    .stDownloadButton button:active:not(:disabled),
+    [data-testid="stFormSubmitButton"] button:active:not(:disabled),
+    [data-testid="stLinkButton"] a:active,
+    button[kind="primary"]:active:not(:disabled),
+    button[kind="secondary"]:active:not(:disabled),
+    button[data-testid^="baseButton"]:active:not(:disabled),
+    a[data-testid^="baseLinkButton"]:active {
+        transform: translateY(3px) scale(0.97) !important;
+        box-shadow: none !important;
+        filter: brightness(0.92) !important;
+        background-color: #e0e0e0 !important;
+        border-color: #9e9e9e !important;
+    }
+
+    .stButton button[kind="primary"],
+    .stButton button[data-testid="baseButton-primary"],
+    [data-testid="stFormSubmitButton"] button[kind="primary"],
+    button[kind="primary"],
+    button[data-testid="baseButton-primary"] {
+        box-shadow: 0 3px 0 rgba(120, 24, 24, 0.28), 0 4px 10px rgba(0, 0, 0, 0.12) !important;
+    }
+
+    .stButton button[kind="primary"]:active:not(:disabled),
+    .stButton button[data-testid="baseButton-primary"]:active:not(:disabled),
+    [data-testid="stFormSubmitButton"] button[kind="primary"]:active:not(:disabled),
+    button[kind="primary"]:active:not(:disabled),
+    button[data-testid="baseButton-primary"]:active:not(:disabled) {
+        background-color: #d93f3f !important;
+        border-color: #c73636 !important;
+    }
+
+    .stButton button:disabled,
+    .stDownloadButton button:disabled,
+    [data-testid="stFormSubmitButton"] button:disabled,
+    button[data-testid^="baseButton"]:disabled {
+        transform: none !important;
+        box-shadow: none !important;
+        cursor: not-allowed !important;
+        will-change: auto !important;
+    }
+
     [data-testid="stSidebar"] {
         min-width: 340px !important;
     }
@@ -1203,7 +1264,7 @@ st.markdown(
         color: #111827 !important;
         -webkit-text-fill-color: #111827 !important;
         border: 1px solid #d1d5db !important;
-        box-shadow: none !important;
+        box-shadow: 0 3px 0 rgba(0, 0, 0, 0.16), 0 4px 10px rgba(0, 0, 0, 0.10) !important;
         color-scheme: light !important;
     }
 
@@ -1226,6 +1287,16 @@ st.markdown(
         color: #111827 !important;
         -webkit-text-fill-color: #111827 !important;
         border-color: #d1d5db !important;
+    }
+
+    [data-testid="stLinkButton"] a[href*="calendar.google.com"]:active,
+    a[href*="calendar.google.com"][role="button"]:active,
+    a[href*="calendar.google.com"][data-testid="baseLinkButton-secondary"]:active {
+        transform: translateY(3px) scale(0.97) !important;
+        box-shadow: none !important;
+        filter: brightness(0.92) !important;
+        background-color: #d1d5db !important;
+        border-color: #9ca3af !important;
     }
 
     /* =========================
@@ -1280,11 +1351,21 @@ st.markdown(
         justify-content: center !important;
         border-radius: 50% !important;
         border: 1px solid #CCCCCC !important;
-        box-shadow: none !important;
+        box-shadow: 0 3px 0 rgba(0, 0, 0, 0.16), 0 4px 10px rgba(0, 0, 0, 0.10) !important;
+        transform: translateY(0) scale(1) !important;
+        transition: transform 0.09s ease-out, box-shadow 0.09s ease-out, background-color 0.09s ease-out, filter 0.09s ease-out, border-color 0.09s ease-out !important;
+        touch-action: manipulation !important;
         appearance: none !important;
         -webkit-appearance: none !important;
         -webkit-tap-highlight-color: transparent !important;
         color-scheme: light !important;
+    }
+
+    [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"]:active:not(:disabled) {
+        transform: translateY(3px) scale(0.96) !important;
+        box-shadow: none !important;
+        filter: brightness(0.90) !important;
+        animation: none !important;
     }
 
     [data-testid="stAudioInput"] [data-testid="stAudioInputActionButton"] svg,
