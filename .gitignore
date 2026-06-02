@@ -1,0 +1,7 @@
+# User data and local settings must not be committed.
+.app_config.json
+app_settings.json
+data/*.json
+data/backup/
+data/export_text/
+data/export_pdf/

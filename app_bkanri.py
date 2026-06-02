@@ -32,7 +32,8 @@ PRIORITIES = ["低", "中", "高", "スケジュール"]
 
 LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
 APP_STATE_STORAGE_KEY = "bukken_kanri_app_state_v1"
-APP_SETTINGS_FILE = Path(__file__).resolve().parent / "app_settings.json"
+APP_CONFIG_FILE = Path(__file__).resolve().parent / ".app_config.json"
+LEGACY_APP_SETTINGS_FILE = Path(__file__).resolve().parent / "app_settings.json"
 
 
 def notify_action_start(message="処理を開始しました"):
@@ -153,43 +154,67 @@ def load_app_state():
 def normalize_app_settings(settings):
     if not isinstance(settings, dict):
         return None
-    data_file_path = str(settings.get("data_file_path", "")).strip()
-    if not data_file_path:
+
+    properties_file_path = str(
+        settings.get("properties_file_path") or settings.get("data_file_path") or ""
+    ).strip()
+    data_folder_path = str(settings.get("data_folder_path") or "").strip()
+
+    if not properties_file_path and data_folder_path:
+        properties_file_path = str(resolve_data_file_path(data_folder_path))
+    if not properties_file_path:
         return None
-    return {"data_file_path": data_file_path}
+
+    properties_path = Path(properties_file_path)
+    if not data_folder_path:
+        data_folder_path = str(properties_path.parent)
+
+    return {
+        "data_folder_path": data_folder_path,
+        "properties_file_path": str(properties_path),
+        "last_loaded_at": str(settings.get("last_loaded_at") or ""),
+    }
 
 
 def load_app_settings():
-    if not APP_SETTINGS_FILE.exists():
-        return None
-    try:
-        with open(APP_SETTINGS_FILE, "r", encoding="utf-8") as f:
-            return normalize_app_settings(json.load(f))
-    except Exception:
-        return None
+    for settings_file in (APP_CONFIG_FILE, LEGACY_APP_SETTINGS_FILE):
+        if not settings_file.exists():
+            continue
+        try:
+            with open(settings_file, "r", encoding="utf-8") as f:
+                settings = normalize_app_settings(json.load(f))
+            if settings is not None:
+                return settings
+        except Exception:
+            continue
+    return None
 
 
 def save_app_settings(data_file_path):
-    settings = normalize_app_settings({"data_file_path": data_file_path})
+    settings = normalize_app_settings({
+        "properties_file_path": data_file_path,
+        "last_loaded_at": datetime.now().isoformat(timespec="seconds"),
+    })
     if settings is None:
         return
     try:
-        with open(APP_SETTINGS_FILE, "w", encoding="utf-8") as f:
+        with open(APP_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(settings, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
     st.session_state["app_settings"] = settings
-    st.session_state["data_file_path"] = settings["data_file_path"]
+    st.session_state["data_file_path"] = settings["properties_file_path"]
 
 
 def clear_app_settings():
     st.session_state.pop("app_settings", None)
     st.session_state.pop("data_file_path", None)
-    if APP_SETTINGS_FILE.exists():
-        try:
-            APP_SETTINGS_FILE.unlink()
-        except Exception:
-            pass
+    for settings_file in (APP_CONFIG_FILE, LEGACY_APP_SETTINGS_FILE):
+        if settings_file.exists():
+            try:
+                settings_file.unlink()
+            except Exception:
+                pass
 
 
 def resolve_data_file_path(path_text):
@@ -201,18 +226,32 @@ def resolve_data_file_path(path_text):
     return p / DATA_FILE_NAME
 
 
+def is_app_settings_storage_available(settings):
+    settings = normalize_app_settings(settings)
+    if not settings:
+        return False
+    try:
+        return Path(settings["data_folder_path"]).exists()
+    except Exception:
+        return False
+
+
 def restore_app_settings():
     if "app_settings" in st.session_state:
         settings = normalize_app_settings(st.session_state["app_settings"])
-        if settings:
-            st.session_state["data_file_path"] = settings["data_file_path"]
+        if settings and is_app_settings_storage_available(settings):
+            st.session_state["app_settings"] = settings
+            st.session_state["data_file_path"] = settings["properties_file_path"]
             return settings
 
     settings = load_app_settings()
-    if settings:
+    if settings and is_app_settings_storage_available(settings):
         st.session_state["app_settings"] = settings
-        st.session_state["data_file_path"] = settings["data_file_path"]
+        st.session_state["data_file_path"] = settings["properties_file_path"]
         return settings
+
+    st.session_state.pop("app_settings", None)
+    st.session_state.pop("data_file_path", None)
     return None
 
 def load_initial_data():
@@ -267,12 +306,6 @@ def normalize_data(data):
 
 def load_data():
     init_dirs()
-    github_data, github_error = load_data_from_github()
-    if github_data is not None:
-        return github_data
-    if github_error:
-        st.error(f"GitHubからのデータ読み込みに失敗したためローカル保存を使用します。原因: {github_error}")
-
     data_file = get_data_file()
     if not data_file.exists():
         return {"projects": []}
@@ -287,10 +320,6 @@ def load_data():
 def save_data(data):
     init_dirs()
     data = normalize_data(data)
-    github_error = save_data_to_github(data)
-    if github_error:
-        st.error(f"GitHubへの保存に失敗したためローカル保存のみ実行しました。原因: {github_error}")
-
     data_file = get_data_file()
     backup_dir = get_backup_dir()
     if data_file.exists():
@@ -1658,11 +1687,16 @@ if "data" not in st.session_state:
     app_settings = restore_app_settings()
     if app_settings is not None:
         st.session_state["data"] = load_initial_data()
+        save_app_settings(app_settings["properties_file_path"])
+        st.session_state["auto_loaded_previous_storage"] = True
     else:
         st.session_state["data"] = {"projects": []}
+        st.session_state["auto_loaded_previous_storage"] = False
 
 data = st.session_state["data"]
 show_queued_feedback()
+if st.session_state.get("auto_loaded_previous_storage"):
+    st.caption("前回の保存先を自動読み込みしました")
 
 keyword_search_query = st.session_state.get("project_keyword_search", "")
 if data.get("projects"):
@@ -1779,7 +1813,8 @@ def render_project_management_panel(panel_prefix="sidebar"):
 
     st.divider()
 
-    st.header("📂 現在の保存先")
+    st.header("📂 JOIN設定（保存先変更用）")
+    st.caption("保存先を変更したいときだけ使用します。")
     st.caption(str(get_data_file()))
 
     if "show_storage_selector" not in st.session_state:
@@ -1809,6 +1844,7 @@ def render_project_management_panel(panel_prefix="sidebar"):
                             save_app_settings(str(resolved))
                             st.session_state["show_storage_selector"] = False
                             st.session_state["data"] = load_initial_data()
+                        st.session_state["auto_loaded_previous_storage"] = False
                         queue_feedback("success", "保存先を保存しました。次回起動時も自動で読み込みます。")
                         rerun_app()
                     except Exception:
