@@ -39,6 +39,14 @@ def notify_action_start(message="処理を開始しました"):
     st.toast(message)
 
 
+def rerun_app():
+    """Streamlit のバージョン差を吸収して画面を即時再描画する。"""
+    if hasattr(st, "rerun"):
+        st.rerun()
+    else:
+        st.experimental_rerun()
+
+
 def queue_feedback(kind, message):
     st.session_state.setdefault("_feedback_messages", []).append({"kind": kind, "message": message})
 
@@ -110,6 +118,8 @@ def save_app_state():
         payload = {
             "data": normalize_data(st.session_state.get("data", {"projects": []})),
             "selected_project_id": st.session_state.get("selected_project_id"),
+            "selected_property_id": st.session_state.get("selected_property_id"),
+            "current_view": st.session_state.get("current_view", "list"),
             "filter_mode": normalize_filter_mode(st.session_state.get("filter_mode", "すべて")),
         }
         local_storage.setItem(APP_STATE_STORAGE_KEY, json.dumps(payload, ensure_ascii=False))
@@ -132,6 +142,8 @@ def load_app_state():
         return {
             "data": normalize_data(payload.get("data", {"projects": []})),
             "selected_project_id": payload.get("selected_project_id"),
+            "selected_property_id": payload.get("selected_property_id") or payload.get("selected_project_id"),
+            "current_view": payload.get("current_view", "list"),
             "filter_mode": normalize_filter_mode(payload.get("filter_mode", "すべて")),
         }
     except Exception:
@@ -206,7 +218,10 @@ def restore_app_settings():
 def load_initial_data():
     app_state = load_app_state()
     if app_state is not None:
-        st.session_state["selected_project_id"] = app_state.get("selected_project_id")
+        selected_id = app_state.get("selected_property_id") or app_state.get("selected_project_id")
+        st.session_state["selected_project_id"] = selected_id
+        st.session_state["selected_property_id"] = selected_id
+        st.session_state["current_view"] = app_state.get("current_view", "list")
         st.session_state["filter_mode"] = app_state.get("filter_mode", "すべて")
 
     return load_data()
@@ -1599,7 +1614,7 @@ with header_col2:
         notify_action_start("スケジュール一覧を表示します")
         st.session_state["page_mode"] = "schedule"
         queue_feedback("success", "スケジュール一覧を表示しました")
-        st.rerun()
+        rerun_app()
 with header_col3:
     st.text_input(
         "キーワード検索",
@@ -1611,6 +1626,9 @@ with header_col3:
 
 if "selected_project_id" not in st.session_state:
     st.session_state["selected_project_id"] = None
+
+if "selected_property_id" not in st.session_state:
+    st.session_state["selected_property_id"] = st.session_state.get("selected_project_id")
 
 if "folder_path_temp" not in st.session_state:
     st.session_state["folder_path_temp"] = ""
@@ -1632,6 +1650,9 @@ if "filter_mode" not in st.session_state:
 
 if "page_mode" not in st.session_state:
     st.session_state["page_mode"] = "main"
+
+if "current_view" not in st.session_state:
+    st.session_state["current_view"] = "list"
 
 if "data" not in st.session_state:
     app_settings = restore_app_settings()
@@ -1689,9 +1710,12 @@ def render_project_management_panel(panel_prefix="sidebar"):
             if st.button(label, key=f"{panel_prefix}_select_{p['id']}", use_container_width=True):
                 notify_action_start("物件を選択しています")
                 st.session_state["selected_project_id"] = p["id"]
+                st.session_state["selected_property_id"] = p["id"]
+                st.session_state["current_view"] = "detail"
+                st.session_state["mobile_view"] = "detail"
                 save_app_state()
                 queue_feedback("success", "物件を選択しました")
-                st.rerun()
+                rerun_app()
 
     else:
         st.info("物件がありません。")
@@ -1742,11 +1766,14 @@ def render_project_management_panel(panel_prefix="sidebar"):
                         persist_data(data)
 
                         st.session_state["selected_project_id"] = new_project["id"]
+                        st.session_state["selected_property_id"] = new_project["id"]
+                        st.session_state["current_view"] = "detail"
+                        st.session_state["mobile_view"] = "detail"
                         st.session_state["folder_path_temp"] = ""
                         st.session_state["pdf_path_temp"] = ""
 
                     queue_feedback("success", "物件を追加しました。")
-                    st.rerun()
+                    rerun_app()
                 except Exception:
                     st.error("物件追加に失敗しました。もう一度確認してください。")
 
@@ -1783,7 +1810,7 @@ def render_project_management_panel(panel_prefix="sidebar"):
                             st.session_state["show_storage_selector"] = False
                             st.session_state["data"] = load_initial_data()
                         queue_feedback("success", "保存先を保存しました。次回起動時も自動で読み込みます。")
-                        st.rerun()
+                        rerun_app()
                     except Exception:
                         st.error("保存先設定に失敗しました。パスを確認してください。")
 
@@ -1812,9 +1839,14 @@ def render_project_management_panel(panel_prefix="sidebar"):
 
                     st.session_state["data"] = normalize_data(uploaded_data)
                     if st.session_state["data"]["projects"]:
-                        st.session_state["selected_project_id"] = st.session_state["data"]["projects"][0]["id"]
+                        first_project_id = st.session_state["data"]["projects"][0]["id"]
+                        st.session_state["selected_project_id"] = first_project_id
+                        st.session_state["selected_property_id"] = first_project_id
+                        st.session_state["current_view"] = "detail"
                     else:
                         st.session_state["selected_project_id"] = None
+                        st.session_state["selected_property_id"] = None
+                        st.session_state["current_view"] = "list"
 
                     # 読込直後に保存済みJSONとして即時登録（JOINボタン不要）
                     save_data(st.session_state["data"])
@@ -1822,7 +1854,7 @@ def render_project_management_panel(panel_prefix="sidebar"):
                     save_app_state()
 
                 queue_feedback("success", "JSONを読み込み、保存済みJSONとして登録しました。次回起動時は自動復元されます。")
-                st.rerun()
+                rerun_app()
             except Exception:
                 st.error("JSONの読み込みに失敗しました。形式を確認してください。")
 
@@ -1838,6 +1870,43 @@ def render_project_management_panel(panel_prefix="sidebar"):
     )
 
 
+def render_project_list_view():
+    """メイン領域に表示する物件一覧。既存の検索・表示フィルタ条件を使う。"""
+    st.header("📌 物件一覧")
+    st.caption("左側の一覧と同じ検索条件・表示フィルタで絞り込まれています。物件ボタンを押すと詳細画面を開きます。")
+
+    keyword_query = st.session_state.get("project_keyword_search", "")
+    filter_mode = normalize_filter_mode(st.session_state.get("filter_mode", "すべて"))
+    visible_projects = []
+    for p in filter_projects_by_keyword(data["projects"], keyword_query):
+        open_count = count_open_logs(p)
+        high_count = count_high_logs(p)
+        if filter_mode == "未対応あり" and open_count == 0:
+            continue
+        if filter_mode == "重要度高あり" and high_count == 0:
+            continue
+        visible_projects.append(p)
+
+    st.caption(f"表示フィルタ：{filter_mode} / 検索結果：{len(visible_projects)}件")
+    if not visible_projects:
+        st.info("検索条件に一致する物件はありません。検索欄を空にするか、表示フィルタを変更してください。")
+        return
+
+    for p in visible_projects:
+        open_count = count_open_logs(p)
+        high_count = count_high_logs(p)
+        label = f"{p.get('name', '')}｜未{open_count}｜高{high_count}"
+        if st.button(label, key=f"main_list_select_{p['id']}", use_container_width=True):
+            notify_action_start("物件を選択しています")
+            st.session_state["selected_project_id"] = p["id"]
+            st.session_state["selected_property_id"] = p["id"]
+            st.session_state["current_view"] = "detail"
+            st.session_state["mobile_view"] = "detail"
+            save_app_state()
+            queue_feedback("success", "物件詳細を表示しました")
+            rerun_app()
+
+
 with st.sidebar:
     render_project_management_panel("sidebar")
 
@@ -1850,14 +1919,20 @@ with mv1:
     if st.button("物件一覧", key="mobile_show_list", use_container_width=True):
         notify_action_start("物件一覧を表示します")
         st.session_state["mobile_view"] = "list"
+        st.session_state["current_view"] = "list"
         queue_feedback("success", "物件一覧を表示しました")
-        st.rerun()
+        rerun_app()
 with mv2:
     if st.button("物件詳細", key="mobile_show_detail", use_container_width=True):
         notify_action_start("物件詳細を表示します")
         st.session_state["mobile_view"] = "detail"
+        if st.session_state.get("selected_project_id") is None and data.get("projects"):
+            first_project_id = data["projects"][0]["id"]
+            st.session_state["selected_project_id"] = first_project_id
+            st.session_state["selected_property_id"] = first_project_id
+        st.session_state["current_view"] = "detail"
         queue_feedback("success", "物件詳細を表示しました")
-        st.rerun()
+        rerun_app()
 st.markdown("</div>", unsafe_allow_html=True)
 
 if st.session_state.get("mobile_view") == "list":
@@ -1873,8 +1948,9 @@ if st.session_state.get("page_mode") == "schedule":
     if st.button("← 物件詳細に戻る", key="back_to_main_from_schedule"):
         notify_action_start("物件詳細に戻ります")
         st.session_state["page_mode"] = "main"
+        st.session_state["current_view"] = "detail"
         queue_feedback("success", "物件詳細を表示しました")
-        st.rerun()
+        rerun_app()
 
     if not schedule_logs:
         st.info("重要度が『スケジュール』のデータはありません。")
@@ -1890,17 +1966,45 @@ if not data["projects"]:
     st.stop()
 
 
-if st.session_state["selected_project_id"] is None:
-    st.session_state["selected_project_id"] = data["projects"][0]["id"]
+if st.session_state.get("current_view", "list") != "detail":
+    render_project_list_view()
+    st.stop()
+
+
+selected_project_id = st.session_state.get("selected_property_id") or st.session_state.get("selected_project_id")
+if selected_project_id is None:
+    selected_project_id = data["projects"][0]["id"]
+    st.session_state["selected_project_id"] = selected_project_id
+    st.session_state["selected_property_id"] = selected_project_id
     save_app_state()
+else:
+    st.session_state["selected_project_id"] = selected_project_id
+    st.session_state["selected_property_id"] = selected_project_id
 
 
-project = get_project(data, st.session_state["selected_project_id"])
+project = get_project(data, selected_project_id)
 
 if project is None:
-    project = data["projects"][0]
-    st.session_state["selected_project_id"] = project["id"]
+    st.warning("選択された物件が見つかりません。")
+    if st.button("← 物件一覧へ戻る", key="back_to_list_from_missing_project"):
+        notify_action_start("物件一覧に戻ります")
+        st.session_state["current_view"] = "list"
+        st.session_state["selected_project_id"] = None
+        st.session_state["selected_property_id"] = None
+        save_app_state()
+        queue_feedback("success", "物件一覧を表示しました")
+        rerun_app()
+    st.stop()
+
+
+if st.button("← 物件一覧へ戻る", key=f"back_to_list_from_detail_{project['id']}"):
+    notify_action_start("物件一覧に戻ります")
+    st.session_state["current_view"] = "list"
+    st.session_state["selected_project_id"] = None
+    st.session_state["selected_property_id"] = None
     save_app_state()
+    queue_feedback("success", "物件一覧を表示しました")
+    rerun_app()
 
 
 current_folder_key = f"current_folder_{project['id']}"
@@ -2022,7 +2126,7 @@ if st.session_state["show_structural_memo_editor"]:
                     project["structural_memo_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                     persist_data(data)
                 queue_feedback("success", "構造設計メモを保存しました。")
-                st.rerun()
+                rerun_app()
             except Exception:
                 st.error("構造設計メモの保存に失敗しました。もう一度確認してください。")
 
@@ -2091,7 +2195,7 @@ if st.button("音声メモを履歴に追加", key=f"add_voice_memo_{project['id
                 )
                 persist_data(data)
             queue_feedback("success", "音声メモを日時付きで履歴に追加しました。")
-            st.rerun()
+            rerun_app()
         except Exception:
             st.error("音声メモの追加に失敗しました。もう一度確認してください。")
 
@@ -2193,7 +2297,7 @@ else:
                             st.session_state["editing_log_id"] = None
 
                         queue_feedback("success", "修正を保存しました。")
-                        st.rerun()
+                        rerun_app()
                     except Exception:
                         st.error("修正の保存に失敗しました。もう一度確認してください。")
 
@@ -2202,7 +2306,7 @@ else:
                     notify_action_start("編集を取り消します")
                     st.session_state["editing_log_id"] = None
                     queue_feedback("success", "編集を取り消しました")
-                    st.rerun()
+                    rerun_app()
 
             with bc3:
                 if st.button("📎開く", key=f"open_edit_attach_{log['id']}"):
@@ -2219,7 +2323,7 @@ else:
                     notify_action_start("編集画面を表示します")
                     st.session_state["editing_log_id"] = log["id"]
                     queue_feedback("success", "編集画面を表示しました")
-                    st.rerun()
+                    rerun_app()
 
             with c2:
                 if st.button("✔保存", key=f"save_{log['id']}"):
@@ -2228,7 +2332,7 @@ else:
                         with st.spinner("保存中です..."):
                             persist_data(data)
                         queue_feedback("success", "保存しました。")
-                        st.rerun()
+                        rerun_app()
                     except Exception:
                         st.error("保存に失敗しました。もう一度確認してください。")
 
@@ -2242,7 +2346,7 @@ else:
                             ]
                             persist_data(data)
                         queue_feedback("warning", "物件を削除しました")
-                        st.rerun()
+                        rerun_app()
                     except Exception:
                         st.error("削除に失敗しました。もう一度確認してください。")
 
@@ -2320,7 +2424,7 @@ with st.form("add_log_form"):
                     st.session_state["new_attachment_path"] = ""
 
                 queue_feedback("success", "やり取りを追加しました。")
-                st.rerun()
+                rerun_app()
             except Exception:
                 st.error("やり取り追加に失敗しました。もう一度確認してください。")
 
@@ -2368,7 +2472,7 @@ with st.expander("物件名・相手先を編集"):
                     project["client"] = edit_client.strip()
                     persist_data(data)
                 queue_feedback("success", "物件情報を保存しました")
-                st.rerun()
+                rerun_app()
             except Exception:
                 st.error("物件情報の保存に失敗しました。もう一度確認してください。")
 
@@ -2401,7 +2505,7 @@ with st.expander("🔗 現在の物件のパス設定"):
                     project["schedule_pdf_path"] = st.session_state[current_pdf_key].strip()
                     persist_data(data)
                 queue_feedback("success", "現在の物件にパスを保存しました。")
-                st.rerun()
+                rerun_app()
             except Exception:
                 st.error("パス設定の保存に失敗しました。もう一度確認してください。")
 
