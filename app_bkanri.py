@@ -22,8 +22,12 @@ except Exception:
     LocalStorage = None
 
 APP_TITLE = "物件管理アプリ"
-LOCAL_DATA_DIR = Path(__file__).resolve().parent / "data"
-DATA_FILE_NAME = "bukken_data.json"
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+DATA_FILE = DATA_DIR / "bukken_data.json"
+
+# 既存関数からも参照するため、ファイル名とGitHub上の保存先は定数として残す。
+DATA_FILE_NAME = DATA_FILE.name
 GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
@@ -95,9 +99,10 @@ def save_local_storage_data(data):
 
 
 def persist_data(data):
+    """画面操作で変更されたデータを session_state とアプリ内JSONへ即時保存する。"""
     normalized = normalize_data(data)
     st.session_state["data"] = normalized
-    save_data(normalized)
+    save_local_data(normalized)
     save_local_storage_data(normalized)
     save_app_state()
 
@@ -149,6 +154,7 @@ def load_app_state():
 
 
 def load_initial_data():
+    """起動時にアプリ内JSONを優先して読み込み、前回状態を復元する。"""
     app_state = load_app_state()
     if app_state is not None:
         selected_id = app_state.get("selected_property_id") or app_state.get("selected_project_id")
@@ -157,15 +163,24 @@ def load_initial_data():
         st.session_state["current_view"] = app_state.get("current_view", "list")
         st.session_state["filter_mode"] = app_state.get("filter_mode", "すべて")
 
-    return load_data()
+    local_data = load_local_data()
+    if local_data is not None:
+        st.session_state["_auto_loaded_local_data"] = True
+        return local_data
+
+    local_storage_data = get_local_storage_data()
+    if local_storage_data is not None:
+        return local_storage_data
+
+    return {"projects": []}
 
 
 def get_data_file():
-    return LOCAL_DATA_DIR / DATA_FILE_NAME
+    return DATA_FILE
 
 
 def get_data_dir():
-    return get_data_file().parent
+    return DATA_DIR
 
 
 def get_backup_dir():
@@ -196,29 +211,42 @@ def normalize_data(data):
     return data
 
 
-def load_data():
+def load_local_data():
+    """アプリ内の data/bukken_data.json を読み込み、存在しない/壊れている場合は None を返す。"""
     init_dirs()
     data_file = get_data_file()
     if not data_file.exists():
-        return {"projects": []}
+        return None
+
     try:
         with open(data_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         return normalize_data(data)
     except Exception:
-        return {"projects": []}
+        return None
 
 
-def save_data(data):
+def save_local_data(data):
+    """アプリ内の data/bukken_data.json へ現在データを自動保存する。"""
     init_dirs()
-    data = normalize_data(data)
+    normalized = normalize_data(data)
     data_file = get_data_file()
     backup_dir = get_backup_dir()
     if data_file.exists():
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         shutil.copy2(data_file, backup_dir / f"bukken_data_{ts}.json")
     with open(data_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(normalized, f, ensure_ascii=False, indent=2)
+
+
+def load_data():
+    """後方互換用: アプリ内JSONを読み込み、なければ空データを返す。"""
+    return load_local_data() or {"projects": []}
+
+
+def save_data(data):
+    """後方互換用: アプリ内JSONへ保存する。"""
+    save_local_data(data)
 
 
 def _github_headers(token):
@@ -1576,9 +1604,11 @@ if "current_view" not in st.session_state:
     st.session_state["current_view"] = "list"
 
 if "data" not in st.session_state:
-    st.session_state["data"] = {"projects": []}
+    st.session_state["data"] = load_initial_data()
 
 data = st.session_state["data"]
+if st.session_state.pop("_auto_loaded_local_data", False):
+    st.caption("前回保存データを自動読み込みしました")
 show_queued_feedback()
 
 keyword_search_query = st.session_state.get("project_keyword_search", "")
@@ -1706,9 +1736,7 @@ def render_project_management_panel(panel_prefix="sidebar"):
         st.session_state["selected_property_id"] = None
         st.session_state["current_view"] = "list"
         st.session_state["mobile_view"] = "list"
-        save_data(st.session_state["data"])
-        save_local_storage_data(st.session_state["data"])
-        save_app_state()
+        persist_data(st.session_state["data"])
         queue_feedback("success", "新規データを作成しました。")
         rerun_app()
 
@@ -1742,10 +1770,8 @@ def render_project_management_panel(panel_prefix="sidebar"):
                         st.session_state["selected_property_id"] = None
                         st.session_state["current_view"] = "list"
 
-                    # 読込直後に保存済みJSONとして即時登録
-                    save_data(st.session_state["data"])
-                    save_local_storage_data(st.session_state["data"])
-                    save_app_state()
+                    # 読込直後にアプリ内保存済みJSONとして即時登録
+                    persist_data(st.session_state["data"])
 
                 queue_feedback("success", "JSONを読み込みました。")
                 rerun_app()
