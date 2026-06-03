@@ -22,7 +22,6 @@ except Exception:
     LocalStorage = None
 
 APP_TITLE = "物件管理アプリ"
-DEFAULT_DATA_DIR = Path(r"C:\構造設計メモ管理データ")
 LOCAL_DATA_DIR = Path(__file__).resolve().parent / "data"
 DATA_FILE_NAME = "bukken_data.json"
 GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
@@ -32,8 +31,6 @@ PRIORITIES = ["低", "中", "高", "スケジュール"]
 
 LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
 APP_STATE_STORAGE_KEY = "bukken_kanri_app_state_v1"
-APP_CONFIG_FILE = Path(__file__).resolve().parent / ".app_config.json"
-LEGACY_APP_SETTINGS_FILE = Path(__file__).resolve().parent / "app_settings.json"
 
 
 def notify_action_start(message="処理を開始しました"):
@@ -151,109 +148,6 @@ def load_app_state():
         return None
 
 
-def normalize_app_settings(settings):
-    if not isinstance(settings, dict):
-        return None
-
-    properties_file_path = str(
-        settings.get("properties_file_path") or settings.get("data_file_path") or ""
-    ).strip()
-    data_folder_path = str(settings.get("data_folder_path") or "").strip()
-
-    if not properties_file_path and data_folder_path:
-        properties_file_path = str(resolve_data_file_path(data_folder_path))
-    if not properties_file_path:
-        return None
-
-    properties_path = Path(properties_file_path)
-    if not data_folder_path:
-        data_folder_path = str(properties_path.parent)
-
-    return {
-        "data_folder_path": data_folder_path,
-        "properties_file_path": str(properties_path),
-        "last_loaded_at": str(settings.get("last_loaded_at") or ""),
-    }
-
-
-def load_app_settings():
-    for settings_file in (APP_CONFIG_FILE, LEGACY_APP_SETTINGS_FILE):
-        if not settings_file.exists():
-            continue
-        try:
-            with open(settings_file, "r", encoding="utf-8") as f:
-                settings = normalize_app_settings(json.load(f))
-            if settings is not None:
-                return settings
-        except Exception:
-            continue
-    return None
-
-
-def save_app_settings(data_file_path):
-    settings = normalize_app_settings({
-        "properties_file_path": data_file_path,
-        "last_loaded_at": datetime.now().isoformat(timespec="seconds"),
-    })
-    if settings is None:
-        return
-    try:
-        with open(APP_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-    st.session_state["app_settings"] = settings
-    st.session_state["data_file_path"] = settings["properties_file_path"]
-
-
-def clear_app_settings():
-    st.session_state.pop("app_settings", None)
-    st.session_state.pop("data_file_path", None)
-    for settings_file in (APP_CONFIG_FILE, LEGACY_APP_SETTINGS_FILE):
-        if settings_file.exists():
-            try:
-                settings_file.unlink()
-            except Exception:
-                pass
-
-
-def resolve_data_file_path(path_text):
-    if not path_text:
-        return None
-    p = Path(str(path_text).strip().strip('"').strip("'"))
-    if p.suffix.lower() == ".json":
-        return p
-    return p / DATA_FILE_NAME
-
-
-def is_app_settings_storage_available(settings):
-    settings = normalize_app_settings(settings)
-    if not settings:
-        return False
-    try:
-        return Path(settings["data_folder_path"]).exists()
-    except Exception:
-        return False
-
-
-def restore_app_settings():
-    if "app_settings" in st.session_state:
-        settings = normalize_app_settings(st.session_state["app_settings"])
-        if settings and is_app_settings_storage_available(settings):
-            st.session_state["app_settings"] = settings
-            st.session_state["data_file_path"] = settings["properties_file_path"]
-            return settings
-
-    settings = load_app_settings()
-    if settings and is_app_settings_storage_available(settings):
-        st.session_state["app_settings"] = settings
-        st.session_state["data_file_path"] = settings["properties_file_path"]
-        return settings
-
-    st.session_state.pop("app_settings", None)
-    st.session_state.pop("data_file_path", None)
-    return None
-
 def load_initial_data():
     app_state = load_app_state()
     if app_state is not None:
@@ -267,8 +161,6 @@ def load_initial_data():
 
 
 def get_data_file():
-    if "data_file_path" in st.session_state:
-        return Path(st.session_state["data_file_path"])
     return LOCAL_DATA_DIR / DATA_FILE_NAME
 
 
@@ -1684,19 +1576,10 @@ if "current_view" not in st.session_state:
     st.session_state["current_view"] = "list"
 
 if "data" not in st.session_state:
-    app_settings = restore_app_settings()
-    if app_settings is not None:
-        st.session_state["data"] = load_initial_data()
-        save_app_settings(app_settings["properties_file_path"])
-        st.session_state["auto_loaded_previous_storage"] = True
-    else:
-        st.session_state["data"] = {"projects": []}
-        st.session_state["auto_loaded_previous_storage"] = False
+    st.session_state["data"] = {"projects": []}
 
 data = st.session_state["data"]
 show_queued_feedback()
-if st.session_state.get("auto_loaded_previous_storage"):
-    st.caption("前回の保存先を自動読み込みしました")
 
 keyword_search_query = st.session_state.get("project_keyword_search", "")
 if data.get("projects"):
@@ -1813,49 +1696,24 @@ def render_project_management_panel(panel_prefix="sidebar"):
 
     st.divider()
 
-    st.header("📂 JOIN設定（保存先変更用）")
-    st.caption("保存先を変更したいときだけ使用します。")
-    st.caption(str(get_data_file()))
-
-    if "show_storage_selector" not in st.session_state:
-        st.session_state["show_storage_selector"] = st.session_state.get("app_settings") is None
-
-    if st.session_state.get("app_settings") is not None:
-        if st.button("保存先を変更", key=f"{panel_prefix}_change_storage", use_container_width=True):
-            notify_action_start("保存先設定を開きます")
-            st.session_state["show_storage_selector"] = True
-            st.toast("保存先設定を表示しました")
-
-    if st.session_state.get("show_storage_selector", False):
-        with st.form(f"{panel_prefix}_storage_settings_form"):
-            storage_path = st.text_input(
-                "JSONファイルまたは保存フォルダ",
-                value=str(get_data_file()),
-                help="例: C:\\構造設計メモ管理データ\\bukken_data.json または C:\\構造設計メモ管理データ",
-            )
-            if st.form_submit_button("保存先を確定", use_container_width=True):
-                notify_action_start("保存先の設定を開始しました")
-                resolved = resolve_data_file_path(storage_path)
-                if resolved is None:
-                    st.error("保存先設定に失敗しました。保存先を入力してください。")
-                else:
-                    try:
-                        with st.spinner("保存先を設定中です..."):
-                            save_app_settings(str(resolved))
-                            st.session_state["show_storage_selector"] = False
-                            st.session_state["data"] = load_initial_data()
-                        st.session_state["auto_loaded_previous_storage"] = False
-                        queue_feedback("success", "保存先を保存しました。次回起動時も自動で読み込みます。")
-                        rerun_app()
-                    except Exception:
-                        st.error("保存先設定に失敗しました。パスを確認してください。")
-
-    st.divider()
-
     # 最下部：読込・保存関連
-    st.header("💾 読込・保存")
+    st.header("📂 読込・保存")
+
+    if st.button("➕ 新規データ作成", key=f"{panel_prefix}_new_data", use_container_width=True):
+        notify_action_start("新規データ作成を開始しました")
+        st.session_state["data"] = {"projects": []}
+        st.session_state["selected_project_id"] = None
+        st.session_state["selected_property_id"] = None
+        st.session_state["current_view"] = "list"
+        st.session_state["mobile_view"] = "list"
+        save_data(st.session_state["data"])
+        save_local_storage_data(st.session_state["data"])
+        save_app_state()
+        queue_feedback("success", "新規データを作成しました。")
+        rerun_app()
+
     uploaded_json = st.file_uploader(
-        "JSON読込",
+        "Upload",
         type=["json"],
         accept_multiple_files=False,
         help="bukken_data.json を選択してください。",
@@ -1884,12 +1742,12 @@ def render_project_management_panel(panel_prefix="sidebar"):
                         st.session_state["selected_property_id"] = None
                         st.session_state["current_view"] = "list"
 
-                    # 読込直後に保存済みJSONとして即時登録（JOINボタン不要）
+                    # 読込直後に保存済みJSONとして即時登録
                     save_data(st.session_state["data"])
                     save_local_storage_data(st.session_state["data"])
                     save_app_state()
 
-                queue_feedback("success", "JSONを読み込み、保存済みJSONとして登録しました。次回起動時は自動復元されます。")
+                queue_feedback("success", "JSONを読み込みました。")
                 rerun_app()
             except Exception:
                 st.error("JSONの読み込みに失敗しました。形式を確認してください。")
