@@ -73,6 +73,11 @@ def notify_download_start(message):
     st.toast(message)
 
 
+def notify_json_download_complete():
+    st.session_state["json_download_notice"] = True
+    st.toast("最新JSONをダウンロードしました")
+
+
 def get_local_storage_data():
     if LocalStorage is None:
         return None
@@ -1728,6 +1733,13 @@ def render_project_management_panel(panel_prefix="sidebar"):
 
     # 最下部：読込・保存関連
     st.header("📂 読込・保存")
+    st.info(
+        "このアプリはサーバー内部にはデータを保存しません。\n\n"
+        "編集後は必ず「最新JSONをダウンロード」を実行し、\n"
+        "OneDrive または iCloud Drive に保存してください。\n\n"
+        "iPhone・iPad・Windows PCで同じデータを使用する場合は、"
+        "同じJSONファイルを読み込んでください。"
+    )
 
     if st.button("➕ 新規データ作成", key=f"{panel_prefix}_new_data", use_container_width=True):
         notify_action_start("新規データ作成を開始しました")
@@ -1779,15 +1791,21 @@ def render_project_management_panel(panel_prefix="sidebar"):
                 st.error("JSONの読み込みに失敗しました。形式を確認してください。")
 
     st.download_button(
-        "JSON保存",
+        "最新JSONをダウンロード",
         data=json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
         file_name="bukken_data.json",
         mime="application/json",
         use_container_width=True,
         key=f"{panel_prefix}_json_save",
-        on_click=notify_download_start,
-        args=("JSON保存を開始しました",),
+        on_click=notify_json_download_complete,
     )
+    if st.session_state.get("json_download_notice", False):
+        st.success(
+            "✅ ダウンロード完了\n\n"
+            "OneDrive または iCloud Drive に保存してください。\n\n"
+            "保存した JSON を次回読み込むことで、"
+            "iPhone・iPad・PC 間で同じデータを利用できます。"
+        )
 
 
 def render_project_list_view():
