@@ -30,7 +30,7 @@ DATA_FILE = DATA_DIR / "bukken_data.json"
 # 既存関数からも参照するため、ファイル名とGitHub上の保存先は定数として残す。
 DATA_FILE_NAME = DATA_FILE.name
 GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
-APP_PUBLIC_URL = "https://bukken-kanri-app-bgm7sywfwtxeuojvhaeks.streamlit.app/"
+APP_PUBLIC_URL = "https://bukken-kanri-app.streamlit.app"
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高", "スケジュール"]
