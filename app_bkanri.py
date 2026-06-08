@@ -29,6 +29,11 @@ DATA_FILE = DATA_DIR / "bukken_data.json"
 # 既存関数からも参照するため、ファイル名とGitHub上の保存先は定数として残す。
 DATA_FILE_NAME = DATA_FILE.name
 GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
+APP_PUBLIC_URL = "https://bukken-kanri-app-bgm7sywfwtxeuojvhaeks.streamlit.app/"
+APP_QR_CODE_URL = (
+    "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data="
+    f"{urllib.parse.quote(APP_PUBLIC_URL, safe='')}"
+)
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高", "スケジュール"]
@@ -1740,6 +1745,9 @@ def render_project_management_panel(panel_prefix="sidebar"):
         "iPhone・iPad・Windows PCで同じデータを使用する場合は、"
         "同じJSONファイルを読み込んでください。"
     )
+    with st.expander("📱 アプリ共有QRコード", expanded=True):
+        st.image(APP_QR_CODE_URL, caption="物件管理アプリを開くQRコード", width=240)
+        st.markdown(f"[アプリを開く]({APP_PUBLIC_URL})")
 
     if st.button("➕ 新規データ作成", key=f"{panel_prefix}_new_data", use_container_width=True):
         notify_action_start("新規データ作成を開始しました")
