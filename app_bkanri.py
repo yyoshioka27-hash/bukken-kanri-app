@@ -11,6 +11,7 @@ import urllib.parse
 import base64
 import unicodedata
 import requests
+import qrcode
 from faster_whisper import WhisperModel
 from datetime import datetime, date
 from io import BytesIO
@@ -30,10 +31,6 @@ DATA_FILE = DATA_DIR / "bukken_data.json"
 DATA_FILE_NAME = DATA_FILE.name
 GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
 APP_PUBLIC_URL = "https://bukken-kanri-app-bgm7sywfwtxeuojvhaeks.streamlit.app/"
-APP_QR_CODE_URL = (
-    "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data="
-    f"{urllib.parse.quote(APP_PUBLIC_URL, safe='')}"
-)
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高", "スケジュール"]
@@ -81,6 +78,22 @@ def notify_download_start(message):
 def notify_json_download_complete():
     st.session_state["json_download_notice"] = True
     st.toast("最新JSONをダウンロードしました")
+
+
+@st.cache_data
+def build_app_qr_code_bytes():
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8,
+        border=4,
+    )
+    qr.add_data(APP_PUBLIC_URL)
+    qr.make(fit=True)
+    image = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 def get_local_storage_data():
@@ -1746,7 +1759,7 @@ def render_project_management_panel(panel_prefix="sidebar"):
         "同じJSONファイルを読み込んでください。"
     )
     with st.expander("📱 アプリ共有QRコード", expanded=True):
-        st.image(APP_QR_CODE_URL, caption="物件管理アプリを開くQRコード", width=240)
+        st.image(build_app_qr_code_bytes(), caption="物件管理アプリを開くQRコード", width=240)
         st.markdown(f"[アプリを開く]({APP_PUBLIC_URL})")
 
     if st.button("➕ 新規データ作成", key=f"{panel_prefix}_new_data", use_container_width=True):
