@@ -31,13 +31,15 @@ DATA_FILE_NAME = DATA_FILE.name
 GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
 # QR code and share link must always point to the public Streamlit app URL.
 APP_PUBLIC_URL = "https://bukken-kanri-app.streamlit.app"
+SUPABASE_TABLE = "bukken_data"
+SUPABASE_ROW_ID = "main"
 
 STATUSES = ["未対応", "対応中", "対応済", "連絡待ち","保留"]
 PRIORITIES = ["低", "中", "高", "スケジュール"]
 
 LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
 APP_STATE_STORAGE_KEY = "bukken_kanri_app_state_v1"
-DATA_UPDATED_NOTICE = "画面上のデータを更新しました。作業後は最新JSONをダウンロードしてください。"
+DATA_UPDATED_NOTICE = "画面上のデータを更新しました。Supabase保存状態は画面上部で確認できます。"
 
 
 def notify_action_start(message="処理を開始しました"):
@@ -78,8 +80,7 @@ def notify_download_start(message):
 
 def notify_json_download_complete():
     st.session_state["json_download_notice"] = True
-    st.session_state["has_undownloaded_changes"] = False
-    st.toast("最新JSONをダウンロードしました")
+    st.toast("バックアップJSONをダウンロードしました")
 
 
 @st.cache_data
@@ -106,12 +107,91 @@ def save_local_storage_data(data):
     return None
 
 
+def get_supabase_config():
+    url = st.secrets.get("SUPABASE_URL", "")
+    key = (
+        st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        or st.secrets.get("SUPABASE_ANON_KEY", "")
+        or st.secrets.get("SUPABASE_KEY", "")
+    )
+    if not url or not key:
+        return None, None
+    return str(url).rstrip("/"), str(key)
+
+
+def get_supabase_headers():
+    _, key = get_supabase_config()
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
+
+def load_data_from_supabase():
+    url, key = get_supabase_config()
+    if not url or not key:
+        return None, "Supabase settings are missing. Set SUPABASE_URL and SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY in Streamlit Secrets."
+
+    endpoint = f"{url}/rest/v1/{SUPABASE_TABLE}"
+    try:
+        response = requests.get(
+            endpoint,
+            headers=get_supabase_headers(),
+            params={"id": f"eq.{SUPABASE_ROW_ID}", "select": "data"},
+            timeout=20,
+        )
+        response.raise_for_status()
+        rows = response.json()
+        if not rows:
+            empty_data = {"projects": []}
+            save_error = save_data_to_supabase(empty_data)
+            if save_error:
+                return empty_data, save_error
+            return empty_data, None
+        return normalize_data(rows[0].get("data", {"projects": []})), None
+    except Exception as e:
+        return None, f"Supabase load failed: {e}"
+
+
+def save_data_to_supabase(data):
+    url, key = get_supabase_config()
+    if not url or not key:
+        return "Supabase settings are missing, so data was not saved."
+
+    endpoint = f"{url}/rest/v1/{SUPABASE_TABLE}"
+    payload = {
+        "id": SUPABASE_ROW_ID,
+        "data": normalize_data(data),
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    try:
+        response = requests.post(
+            endpoint,
+            headers={**get_supabase_headers(), "Prefer": "resolution=merge-duplicates"},
+            params={"on_conflict": "id"},
+            json=payload,
+            timeout=20,
+        )
+        response.raise_for_status()
+        return None
+    except Exception as e:
+        return f"Supabase save failed: {e}"
+
+
 def persist_data(data):
-    """Update only the current Streamlit session. Do not write app data to Cloud files."""
+    """Update the current session and immediately save the shared app data to Supabase."""
     normalized = normalize_data(data)
     st.session_state["data"] = normalized
     st.session_state["bukken_data"] = normalized
-    st.session_state["has_undownloaded_changes"] = True
+    error = save_data_to_supabase(normalized)
+    if error:
+        st.session_state["supabase_save_error"] = error
+        st.session_state["has_undownloaded_changes"] = True
+    else:
+        st.session_state["supabase_save_error"] = ""
+        st.session_state["has_undownloaded_changes"] = False
+        st.session_state["last_supabase_saved_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def normalize_filter_mode(value):
@@ -128,7 +208,7 @@ def load_app_state():
 
 
 def load_initial_data():
-    """Start with an empty session. Users restore data by uploading bukken_data.json."""
+    """Load shared app data from Supabase. JSON upload remains available for backup restore."""
     app_state = load_app_state()
     if app_state is not None:
         selected_id = app_state.get("selected_property_id") or app_state.get("selected_project_id")
@@ -136,6 +216,16 @@ def load_initial_data():
         st.session_state["selected_property_id"] = selected_id
         st.session_state["current_view"] = app_state.get("current_view", "list")
         st.session_state["filter_mode"] = app_state.get("filter_mode", "すべて")
+
+    supabase_data, supabase_error = load_data_from_supabase()
+    if supabase_error:
+        st.session_state["supabase_load_error"] = supabase_error
+    else:
+        st.session_state["supabase_load_error"] = ""
+
+    if supabase_data is not None:
+        st.session_state["last_supabase_loaded_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return supabase_data
 
     return {"projects": []}
 
@@ -1493,18 +1583,26 @@ if "data" not in st.session_state:
 data = st.session_state["data"]
 st.session_state["bukken_data"] = data
 show_queued_feedback()
-st.warning(
-    "このアプリはStreamlit Cloud内部には保存しません。"
-    "作業後は必ず『最新JSONをダウンロード』でOneDriveまたはiCloudに保存してください。"
-    "次回利用時は保存したJSONを読み込んでください。"
+st.info(
+    "物件データはSupabaseに自動保存されます。"
+    "Streamlit Cloud内部ファイルには保存しません。"
+    "JSONダウンロードはバックアップ用です。"
 )
+if st.session_state.get("supabase_load_error"):
+    st.error(st.session_state["supabase_load_error"])
+if st.session_state.get("supabase_save_error"):
+    st.error(st.session_state["supabase_save_error"])
+if st.session_state.get("last_supabase_loaded_at"):
+    st.caption(f"Supabase読込: {st.session_state['last_supabase_loaded_at']}")
+if st.session_state.get("last_supabase_saved_at"):
+    st.caption(f"Supabase保存: {st.session_state['last_supabase_saved_at']}")
 if st.session_state.get("has_undownloaded_changes", False):
     st.markdown(
-        "<span style='color:#d93025; font-weight:700;'>未ダウンロードの変更があります</span>",
+        "<span style='color:#d93025; font-weight:700;'>Supabaseへ未保存の変更があります。バックアップJSONもダウンロードできます。</span>",
         unsafe_allow_html=True,
     )
 st.download_button(
-    label="💾 最新JSONをダウンロードして保存",
+    label="💾 バックアップJSONをダウンロード",
     data=json.dumps(st.session_state["bukken_data"], ensure_ascii=False, indent=2),
     file_name="bukken_data.json",
     mime="application/json",
@@ -1631,11 +1729,9 @@ def render_project_management_panel(panel_prefix="sidebar"):
     # 最下部：読込・保存関連
     st.header("📂 読込・保存")
     st.info(
-        "このアプリはサーバー内部にはデータを保存しません。\n\n"
-        "編集後は必ず「最新JSONをダウンロード」を実行し、\n"
-        "OneDrive または iCloud Drive に保存してください。\n\n"
-        "iPhone・iPad・Windows PCで同じデータを使用する場合は、"
-        "同じJSONファイルを読み込んでください。"
+        "通常運用ではSupabaseの共有データを自動読込・自動保存します。\n\n"
+        "物件追加・編集・削除・メモ更新・スケジュール更新はSupabaseへ即時保存されます。\n\n"
+        "JSON読込とJSONダウンロードはバックアップ・復元用です。"
     )
     with st.expander("📱 アプリ共有QRコード", expanded=True):
         st.image(build_app_qr_code_bytes(), caption="物件管理アプリを開くQRコード", width=240)
@@ -1693,7 +1789,7 @@ def render_project_management_panel(panel_prefix="sidebar"):
                 st.error("JSONの読み込みに失敗しました。形式を確認してください。")
 
     st.download_button(
-        "💾 最新JSONをダウンロードして保存",
+        "💾 バックアップJSONをダウンロード",
         data=json.dumps(st.session_state["bukken_data"], ensure_ascii=False, indent=2).encode("utf-8"),
         file_name="bukken_data.json",
         mime="application/json",
