@@ -3,7 +3,6 @@
 import streamlit as st
 import json
 import os
-import shutil
 import tempfile
 import uuid
 import html
@@ -38,6 +37,7 @@ PRIORITIES = ["低", "中", "高", "スケジュール"]
 
 LOCAL_STORAGE_KEY = "bukken_kanri_data_v1"
 APP_STATE_STORAGE_KEY = "bukken_kanri_app_state_v1"
+DATA_UPDATED_NOTICE = "画面上のデータを更新しました。作業後は最新JSONをダウンロードしてください。"
 
 
 def notify_action_start(message="処理を開始しました"):
@@ -78,6 +78,7 @@ def notify_download_start(message):
 
 def notify_json_download_complete():
     st.session_state["json_download_notice"] = True
+    st.session_state["has_undownloaded_changes"] = False
     st.toast("最新JSONをダウンロードしました")
 
 
@@ -98,37 +99,19 @@ def build_app_qr_code_bytes():
 
 
 def get_local_storage_data():
-    if LocalStorage is None:
-        return None
-
-    try:
-        local_storage = LocalStorage()
-        raw = local_storage.getItem(LOCAL_STORAGE_KEY)
-        if not raw:
-            return None
-        return normalize_data(json.loads(raw))
-    except Exception:
-        return None
+    return None
 
 
 def save_local_storage_data(data):
-    if LocalStorage is None:
-        return
-
-    try:
-        local_storage = LocalStorage()
-        local_storage.setItem(LOCAL_STORAGE_KEY, json.dumps(normalize_data(data), ensure_ascii=False))
-    except Exception:
-        pass
+    return None
 
 
 def persist_data(data):
-    """画面操作で変更されたデータを session_state とアプリ内JSONへ即時保存する。"""
+    """Update only the current Streamlit session. Do not write app data to Cloud files."""
     normalized = normalize_data(data)
     st.session_state["data"] = normalized
-    save_local_data(normalized)
-    save_local_storage_data(normalized)
-    save_app_state()
+    st.session_state["bukken_data"] = normalized
+    st.session_state["has_undownloaded_changes"] = True
 
 
 def normalize_filter_mode(value):
@@ -137,48 +120,15 @@ def normalize_filter_mode(value):
 
 
 def save_app_state():
-    if LocalStorage is None:
-        return
-
-    try:
-        local_storage = LocalStorage()
-        payload = {
-            "data": normalize_data(st.session_state.get("data", {"projects": []})),
-            "selected_project_id": st.session_state.get("selected_project_id"),
-            "selected_property_id": st.session_state.get("selected_property_id"),
-            "current_view": st.session_state.get("current_view", "list"),
-            "filter_mode": normalize_filter_mode(st.session_state.get("filter_mode", "すべて")),
-        }
-        local_storage.setItem(APP_STATE_STORAGE_KEY, json.dumps(payload, ensure_ascii=False))
-    except Exception:
-        pass
+    return None
 
 
 def load_app_state():
-    if LocalStorage is None:
-        return None
-
-    try:
-        local_storage = LocalStorage()
-        raw = local_storage.getItem(APP_STATE_STORAGE_KEY)
-        if not raw:
-            return None
-        payload = json.loads(raw)
-        if not isinstance(payload, dict):
-            return None
-        return {
-            "data": normalize_data(payload.get("data", {"projects": []})),
-            "selected_project_id": payload.get("selected_project_id"),
-            "selected_property_id": payload.get("selected_property_id") or payload.get("selected_project_id"),
-            "current_view": payload.get("current_view", "list"),
-            "filter_mode": normalize_filter_mode(payload.get("filter_mode", "すべて")),
-        }
-    except Exception:
-        return None
+    return None
 
 
 def load_initial_data():
-    """起動時にアプリ内JSONを優先して読み込み、前回状態を復元する。"""
+    """Start with an empty session. Users restore data by uploading bukken_data.json."""
     app_state = load_app_state()
     if app_state is not None:
         selected_id = app_state.get("selected_property_id") or app_state.get("selected_project_id")
@@ -186,15 +136,6 @@ def load_initial_data():
         st.session_state["selected_property_id"] = selected_id
         st.session_state["current_view"] = app_state.get("current_view", "list")
         st.session_state["filter_mode"] = app_state.get("filter_mode", "すべて")
-
-    local_data = load_local_data()
-    if local_data is not None:
-        st.session_state["_auto_loaded_local_data"] = True
-        return local_data
-
-    local_storage_data = get_local_storage_data()
-    if local_storage_data is not None:
-        return local_storage_data
 
     return {"projects": []}
 
@@ -236,41 +177,23 @@ def normalize_data(data):
 
 
 def load_local_data():
-    """アプリ内の data/bukken_data.json を読み込み、存在しない/壊れている場合は None を返す。"""
-    init_dirs()
-    data_file = get_data_file()
-    if not data_file.exists():
-        return None
-
-    try:
-        with open(data_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return normalize_data(data)
-    except Exception:
-        return None
+    """Cloud内部ファイルを正本として読み込まない。"""
+    return None
 
 
 def save_local_data(data):
-    """アプリ内の data/bukken_data.json へ現在データを自動保存する。"""
-    init_dirs()
-    normalized = normalize_data(data)
-    data_file = get_data_file()
-    backup_dir = get_backup_dir()
-    if data_file.exists():
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        shutil.copy2(data_file, backup_dir / f"bukken_data_{ts}.json")
-    with open(data_file, "w", encoding="utf-8") as f:
-        json.dump(normalized, f, ensure_ascii=False, indent=2)
+    """Cloud内部ファイルへ物件データを保存しない。"""
+    return None
 
 
 def load_data():
-    """後方互換用: アプリ内JSONを読み込み、なければ空データを返す。"""
-    return load_local_data() or {"projects": []}
+    """後方互換用: session_state のデータだけを返す。"""
+    return normalize_data(st.session_state.get("data", {"projects": []}))
 
 
 def save_data(data):
-    """後方互換用: アプリ内JSONへ保存する。"""
-    save_local_data(data)
+    """後方互換用: session_state だけを更新する。"""
+    persist_data(data)
 
 
 def _github_headers(token):
@@ -286,64 +209,11 @@ def _github_file_api_url(repo, path):
 
 
 def load_data_from_github():
-    token = st.secrets.get("GITHUB_TOKEN")
-    repo = st.secrets.get("GITHUB_REPO")
-    if not token or not repo:
-        return None, "Streamlit secrets に GITHUB_TOKEN / GITHUB_REPO が未設定です。"
-
-    url = _github_file_api_url(repo, GITHUB_DATA_PATH)
-    try:
-        response = requests.get(url, headers=_github_headers(token), timeout=20)
-        if response.status_code == 404:
-            empty_data = {"projects": []}
-            create_error = save_data_to_github(empty_data)
-            if create_error:
-                return None, f"GitHubファイルが未作成で、自動作成にも失敗しました: {create_error}"
-            return empty_data, None
-        response.raise_for_status()
-        payload = response.json()
-        encoded = payload.get("content", "")
-        if not encoded:
-            return {"projects": []}, None
-        decoded = base64.b64decode(encoded).decode("utf-8")
-        return normalize_data(json.loads(decoded)), None
-    except requests.RequestException as e:
-        return None, f"通信エラー: {e}"
-    except Exception as e:
-        return None, f"解析エラー: {e}"
+    return None, "GitHub上のJSONは正本として読み込みません。保存したJSONをアップロードしてください。"
 
 
 def save_data_to_github(data):
-    token = st.secrets.get("GITHUB_TOKEN")
-    repo = st.secrets.get("GITHUB_REPO")
-    if not token or not repo:
-        return "Streamlit secrets に GITHUB_TOKEN / GITHUB_REPO が未設定です。"
-
-    url = _github_file_api_url(repo, GITHUB_DATA_PATH)
-    sha = None
-    try:
-        current = requests.get(url, headers=_github_headers(token), timeout=20)
-        if current.status_code == 200:
-            sha = current.json().get("sha")
-        elif current.status_code != 404:
-            current.raise_for_status()
-
-        body = {
-            "message": f"Update {GITHUB_DATA_PATH}",
-            "content": base64.b64encode(
-                json.dumps(normalize_data(data), ensure_ascii=False, indent=2).encode("utf-8")
-            ).decode("utf-8"),
-        }
-        if sha:
-            body["sha"] = sha
-
-        put_response = requests.put(url, headers=_github_headers(token), json=body, timeout=20)
-        put_response.raise_for_status()
-        return None
-    except requests.RequestException as e:
-        return f"通信エラー: {e}"
-    except Exception as e:
-        return f"保存処理エラー: {e}"
+    return "GitHubへ物件データは保存しません。最新JSONをダウンロードしてください。"
 
 
 def open_path(path_text):
@@ -523,17 +393,12 @@ def build_structural_memo_pdf(project):
 
 
 def save_structural_memo_pdf(project):
-    """構造設計メモPDFを保存し、保存パスとPDFバイト列を返す。"""
-    init_dirs()
+    """構造設計メモPDFをCloud内部に保存せず、ファイル名とPDFバイト列を返す。"""
     pdf_bytes = build_structural_memo_pdf(project)
     today = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_name = sanitize_windows_filename(project.get("name", "project"))
-    file_path = get_export_pdf_dir() / f"{safe_name}_やり取り履歴_{today}.pdf"
-
-    with open(file_path, "wb") as f:
-        f.write(pdf_bytes)
-
-    return file_path, pdf_bytes
+    file_name = f"{safe_name}_やり取り履歴_{today}.pdf"
+    return file_name, pdf_bytes
 
 
 @st.cache_resource(show_spinner=False)
@@ -631,17 +496,12 @@ def render_audio_memo_recorder(project_id, voice_memo_key=None):
 
 
 def save_structural_memo_text(project):
-    """構造設計メモtxtを保存し、保存パスと本文を返す。"""
-    init_dirs()
+    """構造設計メモtxtをCloud内部に保存せず、ファイル名と本文を返す。"""
     memo_text = build_structural_memo_text(project)
     today = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_name = sanitize_windows_filename(project.get("name", "project"))
-    file_path = get_export_text_dir() / f"{safe_name}_構造設計メモ_{today}.txt"
-
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(memo_text)
-
-    return file_path, memo_text
+    file_name = f"{safe_name}_構造設計メモ_{today}.txt"
+    return file_name, memo_text
 
 
 
@@ -1631,9 +1491,27 @@ if "data" not in st.session_state:
     st.session_state["data"] = load_initial_data()
 
 data = st.session_state["data"]
-if st.session_state.pop("_auto_loaded_local_data", False):
-    st.caption("前回保存データを自動読み込みしました")
+st.session_state["bukken_data"] = data
 show_queued_feedback()
+st.warning(
+    "このアプリはStreamlit Cloud内部には保存しません。"
+    "作業後は必ず『最新JSONをダウンロード』でOneDriveまたはiCloudに保存してください。"
+    "次回利用時は保存したJSONを読み込んでください。"
+)
+if st.session_state.get("has_undownloaded_changes", False):
+    st.markdown(
+        "<span style='color:#d93025; font-weight:700;'>未ダウンロードの変更があります</span>",
+        unsafe_allow_html=True,
+    )
+st.download_button(
+    label="💾 最新JSONをダウンロードして保存",
+    data=json.dumps(st.session_state["bukken_data"], ensure_ascii=False, indent=2),
+    file_name="bukken_data.json",
+    mime="application/json",
+    use_container_width=True,
+    key="top_latest_json_download",
+    on_click=notify_json_download_complete,
+)
 
 keyword_search_query = st.session_state.get("project_keyword_search", "")
 if data.get("projects"):
@@ -1743,7 +1621,7 @@ def render_project_management_panel(panel_prefix="sidebar"):
                         st.session_state["folder_path_temp"] = ""
                         st.session_state["pdf_path_temp"] = ""
 
-                    queue_feedback("success", "物件を追加しました。")
+                    queue_feedback("success", DATA_UPDATED_NOTICE)
                     rerun_app()
                 except Exception:
                     st.error("物件追加に失敗しました。もう一度確認してください。")
@@ -1771,7 +1649,7 @@ def render_project_management_panel(panel_prefix="sidebar"):
         st.session_state["current_view"] = "list"
         st.session_state["mobile_view"] = "list"
         persist_data(st.session_state["data"])
-        queue_feedback("success", "新規データを作成しました。")
+        queue_feedback("success", DATA_UPDATED_NOTICE)
         rerun_app()
 
     uploaded_json = st.file_uploader(
@@ -1804,7 +1682,9 @@ def render_project_management_panel(panel_prefix="sidebar"):
                         st.session_state["selected_property_id"] = None
                         st.session_state["current_view"] = "list"
 
-                    # 読込直後にアプリ内保存済みJSONとして即時登録
+                    persist_data(st.session_state["data"])
+
+                    # 読込直後は session_state に反映するだけで、Cloud内部ファイルには保存しない。
                     persist_data(st.session_state["data"])
 
                 queue_feedback("success", "JSONを読み込みました。")
@@ -1813,8 +1693,8 @@ def render_project_management_panel(panel_prefix="sidebar"):
                 st.error("JSONの読み込みに失敗しました。形式を確認してください。")
 
     st.download_button(
-        "最新JSONをダウンロード",
-        data=json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
+        "💾 最新JSONをダウンロードして保存",
+        data=json.dumps(st.session_state["bukken_data"], ensure_ascii=False, indent=2).encode("utf-8"),
         file_name="bukken_data.json",
         mime="application/json",
         use_container_width=True,
@@ -2078,17 +1958,17 @@ if st.session_state["show_structural_memo_editor"]:
     memo_col1, memo_col2, memo_col3 = st.columns([1, 1, 3])
 
     with memo_col1:
-        if st.button("💾 メモを保存", key=f"save_structural_memo_body_{project['id']}"):
-            notify_action_start("構造設計メモの保存を開始しました")
+        if st.button("💾 メモを反映", key=f"save_structural_memo_body_{project['id']}"):
+            notify_action_start("構造設計メモを画面上のデータへ反映します")
             try:
-                with st.spinner("構造設計メモを保存中です..."):
+                with st.spinner("構造設計メモを画面上のデータへ反映中です..."):
                     project["structural_memo"] = structural_memo_text
                     project["structural_memo_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                     persist_data(data)
-                queue_feedback("success", "構造設計メモを保存しました。")
+                queue_feedback("success", DATA_UPDATED_NOTICE)
                 rerun_app()
             except Exception:
-                st.error("構造設計メモの保存に失敗しました。もう一度確認してください。")
+                st.error("構造設計メモの更新に失敗しました。もう一度確認してください。")
 
     with memo_col2:
         structural_memo_a4_text = f"""構造設計メモ
@@ -2242,10 +2122,10 @@ else:
             bc1, bc2, bc3, bc4 = st.columns([1, 1, 1, 5])
 
             with bc1:
-                if st.button("💾保存", key=f"edit_save_{log['id']}"):
-                    notify_action_start("修正内容の保存を開始しました")
+                if st.button("💾反映", key=f"edit_save_{log['id']}"):
+                    notify_action_start("修正内容を画面上のデータへ反映します")
                     try:
-                        with st.spinner("修正内容を保存中です..."):
+                        with st.spinner("修正内容を画面上のデータへ反映中です..."):
                             log["date"] = str(edit_date)
                             log["status"] = edit_status
                             log["priority"] = edit_priority
@@ -2256,10 +2136,10 @@ else:
                             persist_data(data)
                             st.session_state["editing_log_id"] = None
 
-                        queue_feedback("success", "修正を保存しました。")
+                        queue_feedback("success", DATA_UPDATED_NOTICE)
                         rerun_app()
                     except Exception:
-                        st.error("修正の保存に失敗しました。もう一度確認してください。")
+                        st.error("修正の更新に失敗しました。もう一度確認してください。")
 
             with bc2:
                 if st.button("❌取消", key=f"cancel_edit_{log['id']}"):
@@ -2286,15 +2166,15 @@ else:
                     rerun_app()
 
             with c2:
-                if st.button("✔保存", key=f"save_{log['id']}"):
-                    notify_action_start("保存を開始しました")
+                if st.button("✔更新", key=f"save_{log['id']}"):
+                    notify_action_start("画面上のデータ更新を開始しました")
                     try:
-                        with st.spinner("保存中です..."):
+                        with st.spinner("画面上のデータを更新中です..."):
                             persist_data(data)
-                        queue_feedback("success", "保存しました。")
+                        queue_feedback("success", DATA_UPDATED_NOTICE)
                         rerun_app()
                     except Exception:
-                        st.error("保存に失敗しました。もう一度確認してください。")
+                        st.error("更新に失敗しました。もう一度確認してください。")
 
             with c3:
                 if st.button("🗑削除", key=f"delete_{log['id']}"):
@@ -2422,19 +2302,19 @@ with st.expander("物件名・相手先を編集"):
         edit_name = st.text_input("物件名", value=project.get("name", ""))
         edit_client = st.text_input("相手先・担当", value=project.get("client", ""))
 
-        update_project = st.form_submit_button("物件名・相手先を保存")
+        update_project = st.form_submit_button("物件名・相手先を更新")
 
         if update_project:
-            notify_action_start("物件情報の保存を開始しました")
+            notify_action_start("物件情報の更新を開始しました")
             try:
-                with st.spinner("物件情報を保存中です..."):
+                with st.spinner("物件情報を画面上のデータへ反映中です..."):
                     project["name"] = edit_name.strip()
                     project["client"] = edit_client.strip()
                     persist_data(data)
-                queue_feedback("success", "物件情報を保存しました")
+                queue_feedback("success", DATA_UPDATED_NOTICE)
                 rerun_app()
             except Exception:
-                st.error("物件情報の保存に失敗しました。もう一度確認してください。")
+                st.error("物件情報の更新に失敗しました。もう一度確認してください。")
 
 
 st.divider()
@@ -2457,17 +2337,17 @@ with st.expander("🔗 現在の物件のパス設定"):
     save_col, open_folder_col, open_pdf_col = st.columns([1, 1, 1])
 
     with save_col:
-        if st.button("💾 現在の物件にパスを保存", type="primary"):
-            notify_action_start("パス設定の保存を開始しました")
+        if st.button("💾 現在の物件にパスを反映", type="primary"):
+            notify_action_start("パス設定の反映を開始しました")
             try:
-                with st.spinner("パス設定を保存中です..."):
+                with st.spinner("パス設定を画面上のデータへ反映中です..."):
                     project["folder_path"] = st.session_state[current_folder_key].strip()
                     project["schedule_pdf_path"] = st.session_state[current_pdf_key].strip()
                     persist_data(data)
-                queue_feedback("success", "現在の物件にパスを保存しました。")
+                queue_feedback("success", DATA_UPDATED_NOTICE)
                 rerun_app()
             except Exception:
-                st.error("パス設定の保存に失敗しました。もう一度確認してください。")
+                st.error("パス設定の更新に失敗しました。もう一度確認してください。")
 
     with open_folder_col:
         if st.button("📂 このフォルダを開く"):
