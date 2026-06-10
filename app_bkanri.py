@@ -10,7 +10,6 @@ import urllib.parse
 import base64
 import unicodedata
 import requests
-import qrcode
 from faster_whisper import WhisperModel
 from datetime import datetime, date
 from io import BytesIO
@@ -29,8 +28,6 @@ DATA_FILE = DATA_DIR / "bukken_data.json"
 # 既存関数からも参照するため、ファイル名とGitHub上の保存先は定数として残す。
 DATA_FILE_NAME = DATA_FILE.name
 GITHUB_DATA_PATH = f"data/{DATA_FILE_NAME}"
-# QR code and share link must always point to the public Streamlit app URL.
-APP_PUBLIC_URL = "https://bukken-kanri-app.streamlit.app"
 SUPABASE_TABLE = "bukken_data"
 SUPABASE_ROW_ID = "main"
 
@@ -81,22 +78,6 @@ def notify_download_start(message):
 def notify_json_download_complete():
     st.session_state["json_download_notice"] = True
     st.toast("バックアップJSONをダウンロードしました")
-
-
-@st.cache_data
-def build_app_qr_code_bytes():
-    qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=8,
-        border=4,
-    )
-    qr.add_data(APP_PUBLIC_URL)
-    qr.make(fit=True)
-    image = qr.make_image(fill_color="black", back_color="white")
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()
 
 
 def get_local_storage_data():
@@ -1733,9 +1714,6 @@ def render_project_management_panel(panel_prefix="sidebar"):
         "物件追加・編集・削除・メモ更新・スケジュール更新はSupabaseへ即時保存されます。\n\n"
         "JSON読込とJSONダウンロードはバックアップ・復元用です。"
     )
-    with st.expander("📱 アプリ共有QRコード", expanded=True):
-        st.image(build_app_qr_code_bytes(), caption="物件管理アプリを開くQRコード", width=240)
-        st.markdown(f"[アプリを開く]({APP_PUBLIC_URL})")
 
     if st.button("➕ 新規データ作成", key=f"{panel_prefix}_new_data", use_container_width=True):
         notify_action_start("新規データ作成を開始しました")
