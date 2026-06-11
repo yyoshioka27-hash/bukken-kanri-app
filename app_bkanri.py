@@ -1507,12 +1507,7 @@ if "project_keyword_search" not in st.session_state:
 
 header_col1, header_col2, header_col3 = st.columns([1, 1, 2])
 with header_col1:
-    if st.button("📅 カレンダー", key="show_google_calendar_link", use_container_width=True):
-        notify_action_start("カレンダーを開く準備をしています")
-        st.session_state["show_google_calendar_link"] = True
-        st.toast("カレンダーを開くリンクを表示しました")
-    if st.session_state.get("show_google_calendar_link"):
-        st.link_button("Googleカレンダーを開く", calendar_url, use_container_width=True)
+    st.link_button("📅 カレンダー", calendar_url, use_container_width=True)
 with header_col2:
     if st.button("📅 スケジュール", key="show_schedule_list", use_container_width=True):
         notify_action_start("スケジュール一覧を表示します")
@@ -2274,16 +2269,12 @@ else:
 
             with c5:
                 calendar_url = build_google_calendar_url(project, log)
-                if st.button("📅予定登録", key=f"show_calendar_link_{log['id']}", use_container_width=True):
-                    notify_action_start("カレンダー予定登録を開始しました")
-                    st.session_state[f"show_calendar_link_{log['id']}"] = True
-                    st.toast("カレンダー予定登録リンクを表示しました")
-                if st.session_state.get(f"show_calendar_link_{log['id']}"):
-                    st.link_button(
-                        "Googleカレンダーで予定を作成",
-                        calendar_url,
-                        use_container_width=True,
-                    )
+                st.link_button(
+                    "📅予定登録",
+                    calendar_url,
+                    use_container_width=True,
+                    key=f"google_calendar_create_{log['id']}",
+                )
 
         st.divider()
 
