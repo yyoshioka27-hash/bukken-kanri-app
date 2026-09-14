@@ -1,0 +1,52 @@
+name: App health check
+
+on:
+  schedule:
+    # About every three days at 09:23 JST; month boundaries are 2-4 days apart.
+    - cron: '23 0 2-30/3 * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/app-healthcheck.yml'
+      - 'scripts/check_app.py'
+      - 'scripts/record_healthcheck.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-healthcheck
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.repository == 'yyoshioka27-hash/bukken-kanri-app'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Verify a fresh Supabase read through the app
+        run: python scripts/check_app.py
+
+  record-activity:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Record a successful check if repository has been idle for 30 days
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python scripts/record_healthcheck.py
