@@ -2112,6 +2112,62 @@ st.divider()
 
 st.subheader("📋 選択物件のやり取り履歴")
 
+st.subheader("📝 やり取りを追加")
+
+st.session_state["new_attachment_path"] = st.text_input(
+    "添付ファイルパス",
+    value=st.session_state["new_attachment_path"],
+)
+
+
+with st.form("add_log_form"):
+    c1, c2, c3 = st.columns([1, 1, 1])
+
+    with c1:
+        log_date = st.date_input("日付", value=date.today())
+
+    with c2:
+        status = st.selectbox("状態", STATUSES)
+
+    with c3:
+        priority = st.selectbox("重要度", PRIORITIES, index=1)
+
+    person = st.text_input("相手先・担当者")
+    content = st.text_area("内容・メモ", height=90)
+    due_date = st.date_input("期限", value=date.today())
+
+    add_log = st.form_submit_button("やり取りを追加")
+
+    if add_log:
+        notify_action_start("やり取り追加を開始しました")
+        if not content.strip():
+            st.error("やり取り追加に失敗しました。内容を入力してください。")
+        else:
+            try:
+                with st.spinner("やり取りを追加中です..."):
+                    project["logs"].append(
+                        {
+                            "id": str(uuid.uuid4()),
+                            "date": str(log_date),
+                            "person": person.strip(),
+                            "content": content.strip(),
+                            "status": status,
+                            "priority": priority,
+                            "due_date": str(due_date),
+                            "attachment_path": st.session_state["new_attachment_path"].strip(),
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        }
+                    )
+                    persist_data(data)
+                    st.session_state["new_attachment_path"] = ""
+
+                queue_feedback("success", "やり取りを追加しました。")
+                rerun_app()
+            except Exception:
+                st.error("やり取り追加に失敗しました。もう一度確認してください。")
+
+st.divider()
+
 show_only_open = st.checkbox("未対応・対応中だけ表示")
 
 logs = project.get("logs", [])
@@ -2278,62 +2334,6 @@ else:
 
         st.divider()
 
-
-st.subheader("📝 やり取りを追加")
-
-st.session_state["new_attachment_path"] = st.text_input(
-    "添付ファイルパス",
-    value=st.session_state["new_attachment_path"],
-)
-
-
-with st.form("add_log_form"):
-    c1, c2, c3 = st.columns([1, 1, 1])
-
-    with c1:
-        log_date = st.date_input("日付", value=date.today())
-
-    with c2:
-        status = st.selectbox("状態", STATUSES)
-
-    with c3:
-        priority = st.selectbox("重要度", PRIORITIES, index=1)
-
-    person = st.text_input("相手先・担当者")
-    content = st.text_area("内容・メモ", height=90)
-    due_date = st.date_input("期限", value=date.today())
-
-    add_log = st.form_submit_button("やり取りを追加")
-
-    if add_log:
-        notify_action_start("やり取り追加を開始しました")
-        if not content.strip():
-            st.error("やり取り追加に失敗しました。内容を入力してください。")
-        else:
-            try:
-                with st.spinner("やり取りを追加中です..."):
-                    project["logs"].append(
-                        {
-                            "id": str(uuid.uuid4()),
-                            "date": str(log_date),
-                            "person": person.strip(),
-                            "content": content.strip(),
-                            "status": status,
-                            "priority": priority,
-                            "due_date": str(due_date),
-                            "attachment_path": st.session_state["new_attachment_path"].strip(),
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        }
-                    )
-                    persist_data(data)
-                    st.session_state["new_attachment_path"] = ""
-
-                queue_feedback("success", "やり取りを追加しました。")
-                rerun_app()
-            except Exception:
-                st.error("やり取り追加に失敗しました。もう一度確認してください。")
-
-st.divider()
 
 st.subheader("🤖 ファイル要約")
 
